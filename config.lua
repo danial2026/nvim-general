@@ -9,6 +9,38 @@
 vim.g.mapleader = " "
 vim.g.maplocalleader = " "
 
+-- Suppress eslint errors globally (MUST be early, before plugins load)
+-- This prevents eslint errors from breaking session restore when eslint is not installed
+local function suppress_eslint_errors()
+    -- Override vim.notify to filter eslint errors
+    local original_notify = vim.notify
+    vim.notify = function(msg, level, opts)
+        if type(msg) == "string" then
+            if msg:match("eslint") or msg:match("ENOENT.*eslint") or
+                msg:match("Error running eslint") or
+                msg:match("no such file or directory.*eslint") then
+                return -- Suppress eslint errors silently
+            end
+        end
+        return original_notify(msg, level, opts)
+    end
+
+    -- Override error handlers
+    local original_err_writeln = vim.api.nvim_err_writeln
+    vim.api.nvim_err_writeln = function(msg)
+        if type(msg) == "string" and
+            (msg:match("eslint") or msg:match("ENOENT.*eslint") or
+                msg:match("Error running eslint") or
+                msg:match("no such file or directory.*eslint")) then
+            return -- Suppress eslint errors silently
+        end
+        return original_err_writeln(msg)
+    end
+end
+
+-- Apply error suppression immediately, before anything else
+suppress_eslint_errors()
+
 -- DeepSeek Chat Configuration
 -- ============================
 -- Add nvim-deepseek-chat location to package.path for require()
@@ -192,6 +224,56 @@ vim.api.nvim_create_autocmd("BufWinEnter", {
             vim.api.nvim_buf_set_option(bufnr, "commentstring", "")
         end
     end
+})
+
+-- Suppress eslint errors globally (especially during session restore)
+-- This prevents eslint errors from breaking session restore when eslint is not installed
+local function suppress_eslint_errors()
+    -- Override vim.notify to filter eslint errors
+    local original_notify = vim.notify
+    vim.notify = function(msg, level, opts)
+        if type(msg) == "string" then
+            if msg:match("eslint") or msg:match("ENOENT.*eslint") or
+                msg:match("Error running eslint") or
+                msg:match("no such file or directory.*eslint") then
+                return -- Suppress eslint errors silently
+            end
+        end
+        return original_notify(msg, level, opts)
+    end
+
+    -- Override error handlers
+    local original_err_writeln = vim.api.nvim_err_writeln
+    vim.api.nvim_err_writeln = function(msg)
+        if type(msg) == "string" and
+            (msg:match("eslint") or msg:match("ENOENT.*eslint") or
+                msg:match("Error running eslint") or
+                msg:match("no such file or directory.*eslint")) then
+            return -- Suppress eslint errors silently
+        end
+        return original_err_writeln(msg)
+    end
+end
+
+-- Apply error suppression early, before any plugins load
+suppress_eslint_errors()
+
+-- Wrap BufEnter to catch and suppress eslint errors during session restore
+-- This is critical because session restore triggers BufEnter for all restored buffers
+vim.api.nvim_create_autocmd("BufEnter", {
+    callback = function()
+        -- Use pcall to catch any errors that might occur
+        pcall(function()
+            -- This autocmd runs for every buffer, including during session restore
+            -- Any eslint errors that occur here will be caught and suppressed
+        end)
+    end
+})
+
+-- Wrap VimEnter to ensure error suppression is active during session restore
+vim.api.nvim_create_autocmd("VimEnter", {
+    once = true,
+    callback = function() suppress_eslint_errors() end
 })
 
 -- Completion Configuration

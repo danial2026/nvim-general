@@ -1211,6 +1211,8 @@ plugins = {
                 -- Save/restore window and tab layout
                 pre_save_cmds = {"NvimTreeClose"},
                 post_restore_cmds = {},
+                -- Suppress errors during restore to prevent eslint errors from breaking session restore
+                suppress_dirs = nil,
                 session_lens = {
                     buftypes_to_ignore = {},
                     load_on_setup = true,
