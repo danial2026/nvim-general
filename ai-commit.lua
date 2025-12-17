@@ -888,13 +888,10 @@ function M.show_ai_message_in_new_tab(ai_generated_message, changes,
 
     if #ai_generated_message > 0 then
         local ai_message = ai_generated_message[1]
-        table.insert(lines, "📝 " .. ai_message.message)
+        table.insert(lines, ai_message.message)
         table.insert(lines, "")
 
         if ai_message.body and ai_message.body ~= "" then
-            table.insert(lines, "DETAILED BODY:")
-            table.insert(lines, "")
-
             local body_preview = ai_message.body
             local body_lines = vim.split(body_preview, "\n")
             local has_content = false
