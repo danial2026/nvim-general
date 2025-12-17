@@ -1,9 +1,9 @@
 -- ============================================
 -- General Purpose Neovim Configuration
 -- ============================================
--- 
+--
 -- "For I know the plans I have for you," declares the Lord, "plans to prosper you and not to harm you, plans to give you hope and a future." - Jeremiah 29:11
--- 
+--
 -- Leader Key Setup
 -- ================
 vim.g.mapleader = " "
@@ -129,13 +129,24 @@ vim.api.nvim_create_autocmd("VimEnter", {
 -- ======================================
 -- Toggle alpha dashboard with <leader>a (opens in new tab)
 vim.keymap.set("n", "<leader>a", function()
-    -- First save the session
-    vim.cmd("AutoSession save")
     -- Check if we're currently in an alpha buffer
     if vim.bo.filetype == "alpha" then
         -- Close the tab if we're in alpha
         vim.cmd("tabclose")
     else
+        -- Only save session if there are modified buffers
+        local has_modified_buffers = false
+        for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+            if vim.api.nvim_buf_is_valid(buf) and vim.api.nvim_buf_get_option(buf, "modified") then
+                has_modified_buffers = true
+                break
+            end
+        end
+
+        if has_modified_buffers then
+            vim.cmd("AutoSession save")
+        end
+
         -- Open alpha dashboard in a new tab
         local alpha_ok, alpha = pcall(require, "alpha")
         if not alpha_ok then
@@ -287,6 +298,305 @@ cmp.setup({
         ["<C-e>"] = cmp.mapping.abort()
     })
 })
+
+-- Snippets Configuration - Simple and Clean
+-- ==========================================
+local luasnip = require("luasnip")
+
+-- Load custom snippets FIRST (before VSCode snippets)
+local snippets_dir = vim.fn.expand("~/.config/nvim-general/snippets")
+local snippet_files = vim.fn.glob(snippets_dir .. "/**/*.lua", false, true)
+
+for _, file in ipairs(snippet_files) do
+    -- Skip init.lua
+    if not file:match("init%.lua$") then
+        local ok, err = pcall(dofile, file)
+        if not ok then
+            vim.notify("Error loading " .. vim.fn.fnamemodify(file, ":t") ..
+                           ": " .. err, vim.log.levels.ERROR)
+        end
+    end
+end
+
+-- Load VSCode-style snippets AFTER custom snippets (as fallback)
+require("luasnip.loaders.from_vscode").lazy_load()
+
+-- Snippet Picker with Telescope
+-- ==============================
+local has_telescope = pcall(require, "telescope")
+if has_telescope then
+    local pickers = require("telescope.pickers")
+    local finders = require("telescope.finders")
+    local conf = require("telescope.config").values
+    local actions = require("telescope.actions")
+    local action_state = require("telescope.actions.state")
+
+    vim.keymap.set({"n", "i"}, "<leader>snp", function()
+        local all_snips = {}
+
+        -- Get current filetype and all filetypes that have snippets
+        local ft_set = {[vim.bo.filetype] = true, ["all"] = true}
+        for ft, _ in pairs(luasnip.snippets or {}) do ft_set[ft] = true end
+
+        -- Collect all snippets with descriptions
+        for ft, _ in pairs(ft_set) do
+            local ft_snips = luasnip.get_snippets(ft) or {}
+            for _, snip in ipairs(ft_snips) do
+                -- Get description from snippet's dscr field
+                local description = ""
+                if snip.dscr then
+                    if type(snip.dscr) == "string" then
+                        description = snip.dscr
+                    elseif type(snip.dscr) == "table" then
+                        description = table.concat(snip.dscr, " ")
+                    end
+                end
+
+                table.insert(all_snips, {
+                    trigger = snip.trigger,
+                    name = snip.name or "",
+                    description = description,
+                    snippet = snip,
+                    ft = ft
+                })
+            end
+        end
+
+        if #all_snips == 0 then
+            vim.notify("No snippets found", vim.log.levels.WARN)
+            return
+        end
+
+        local previewers = require("telescope.previewers")
+
+        pickers.new({}, {
+            prompt_title = "Snippets",
+            finder = finders.new_table({
+                results = all_snips,
+                entry_maker = function(entry)
+                    local display_text =
+                        string.format("[%s] %s", entry.ft, entry.trigger)
+                    if entry.description ~= "" then
+                        display_text = display_text .. " - " ..
+                                           entry.description
+                    end
+
+                    return {
+                        value = entry,
+                        display = display_text,
+                        ordinal = entry.ft .. " " .. entry.trigger .. " " ..
+                            entry.name .. " " .. entry.description
+                    }
+                end
+            }),
+            sorter = conf.generic_sorter({}),
+            previewer = previewers.new_buffer_previewer({
+                title = "Snippet Preview",
+                define_preview = function(self, entry, status)
+                    if not entry or not entry.value or not entry.value.snippet then
+                        vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1,
+                                                   false,
+                                                   {"No preview available"})
+                        return
+                    end
+
+                    local snip = entry.value.snippet
+                    local lines = {}
+
+                    -- Add header with snippet info
+                    table.insert(lines, "# Trigger: " .. entry.value.trigger)
+                    if entry.value.description ~= "" then
+                        table.insert(lines, "# Description: " ..
+                                         entry.value.description)
+                    end
+                    table.insert(lines, "# Filetype: " .. entry.value.ft)
+                    table.insert(lines, "")
+
+                    -- Use LuaSnip's get_docstring method
+                    local ok, docstring = pcall(function()
+                        return snip:get_docstring()
+                    end)
+
+                    if ok and docstring then
+                        if type(docstring) == "table" then
+                            -- Clean up placeholder syntax: ${1:text} -> text
+                            for _, line in ipairs(docstring) do
+                                -- Remove placeholder markers like ${1:text} -> text, $0 -> ""
+                                local cleaned =
+                                    line:gsub("%${%d+:([^}]+)}", "%1") -- ${1:text} -> text
+                                cleaned = cleaned:gsub("%${%d+}", "") -- ${1} -> ""
+                                cleaned = cleaned:gsub("%$%d+", "") -- $1 -> ""
+                                table.insert(lines, cleaned)
+                            end
+                        elseif type(docstring) == "string" then
+                            for line in docstring:gmatch("[^\r\n]+") do
+                                local cleaned =
+                                    line:gsub("%${%d+:([^}]+)}", "%1")
+                                cleaned = cleaned:gsub("%${%d+}", "")
+                                cleaned = cleaned:gsub("%$%d+", "")
+                                table.insert(lines, cleaned)
+                            end
+                        end
+                    end
+
+                    -- Fallback if no docstring
+                    if #lines <= 4 then -- Only header was added
+                        table.insert(lines, "(Expand to see full snippet)")
+                    end
+
+                    vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false,
+                                               lines)
+                    vim.api.nvim_buf_set_option(self.state.bufnr, "filetype",
+                                                entry.value.ft)
+                end
+            }),
+            attach_mappings = function(prompt_bufnr, map)
+                local function expand_snippet()
+                    local selection = action_state.get_selected_entry()
+                    if not selection then return end
+
+                    actions.close(prompt_bufnr)
+
+                    vim.schedule(function()
+                        if vim.fn.mode() ~= "i" then
+                            vim.cmd("startinsert")
+                        end
+                        vim.defer_fn(function()
+                            luasnip.snip_expand(selection.value.snippet)
+                        end, 10)
+                    end)
+                end
+
+                map("i", "<CR>", expand_snippet)
+                map("n", "<CR>", expand_snippet)
+                return true
+            end
+        }):find()
+    end, {desc = "Snippet picker"})
+end
+
+-- Reload snippets
+vim.keymap.set("n", "<leader>snr", function()
+    luasnip.cleanup()
+    require("luasnip.loaders.from_vscode").lazy_load()
+
+    -- Reload custom snippets
+    local snippet_files = vim.fn.glob(snippets_dir .. "/**/*.lua", false, true)
+    for _, file in ipairs(snippet_files) do
+        if not file:match("init%.lua$") then pcall(dofile, file) end
+    end
+
+    vim.notify("Snippets reloaded", vim.log.levels.INFO)
+end, {desc = "Reload snippets"})
+
+-- Debug: show snippets for current file
+vim.keymap.set("n", "<leader>snd", function()
+    local ft = vim.bo.filetype
+    if not ft or ft == "" then
+        vim.notify("No filetype", vim.log.levels.WARN)
+        return
+    end
+
+    local snippets = luasnip.get_snippets(ft) or {}
+    local msg = string.format("Snippets for '%s': %d", ft, #snippets)
+
+    if #snippets > 0 then
+        local examples = {}
+        for i = 1, math.min(5, #snippets) do
+            table.insert(examples, snippets[i].trigger)
+        end
+        msg = msg .. "\nExamples: " .. table.concat(examples, ", ")
+    end
+
+    vim.notify(msg, vim.log.levels.INFO)
+end, {desc = "Show snippets"})
+
+-- Test snippet loading
+vim.api.nvim_create_user_command("SnippetTest", function()
+    local fts = {"lua", "dart", "javascript", "typescript", "go"}
+    local results = {}
+    for _, ft in ipairs(fts) do
+        local count = #(luasnip.get_snippets(ft) or {})
+        table.insert(results, ft .. ": " .. count)
+    end
+    vim.notify("Snippets:\n" .. table.concat(results, "\n"), vim.log.levels.INFO)
+end, {})
+
+-- Create snippet from selection
+vim.keymap.set({"n", "v"}, "<leader>snc", function()
+    local ft = vim.bo.filetype
+    if not ft or ft == "" then
+        vim.notify("No filetype detected", vim.log.levels.WARN)
+        return
+    end
+
+    -- Get trigger name
+    local trigger = vim.fn.input("Snippet trigger: ")
+    if not trigger or trigger == "" then
+        vim.notify("Cancelled", vim.log.levels.WARN)
+        return
+    end
+
+    -- Get snippet body from visual selection or current line
+    local body = ""
+    local mode = vim.fn.mode()
+
+    if mode == "v" or mode == "V" or mode == "\22" then
+        -- Visual mode - get selection
+        vim.cmd('normal! "xy')
+        body = vim.fn.getreg("x")
+    else
+        -- Normal mode - try to get last visual selection
+        local start_pos = vim.fn.getpos("'<")
+        local end_pos = vim.fn.getpos("'>")
+
+        if start_pos[2] > 0 and end_pos[2] > 0 then
+            local lines = vim.fn.getline(start_pos[2], end_pos[2])
+            body = table.concat(lines, "\n")
+        else
+            -- Fall back to current line
+            body = vim.fn.getline(".")
+        end
+    end
+
+    if not body or body == "" then
+        vim.notify("No content to create snippet from", vim.log.levels.WARN)
+        return
+    end
+
+    -- Create snippet file directory
+    local snippet_dir = vim.fn.expand("~/.config/nvim-general/snippets/" .. ft)
+    vim.fn.mkdir(snippet_dir, "p")
+
+    local snippet_file = snippet_dir .. "/custom.lua"
+
+    -- Escape body for Lua string
+    local escaped_body = body:gsub("\\", "\\\\"):gsub('"', '\\"'):gsub("\n",
+                                                                       "\\n")
+
+    -- Create snippet code
+    local snippet_code = string.format([[
+
+-- Custom snippet: %s
+ls.add_snippets("%s", {
+    s("%s", t("%s"))
+})
+]], trigger, ft, trigger, escaped_body)
+
+    -- Append to file
+    local file = io.open(snippet_file, "a")
+    if file then
+        file:write(snippet_code)
+        file:close()
+        vim.notify(string.format("Snippet '%s' created in %s", trigger,
+                                 snippet_file), vim.log.levels.INFO)
+
+        -- Reload snippets
+        pcall(dofile, snippet_file)
+    else
+        vim.notify("Failed to create snippet file", vim.log.levels.ERROR)
+    end
+end, {desc = "Create snippet from selection"})
 
 -- General Keymaps
 -- ================

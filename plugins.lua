@@ -22,6 +22,45 @@ end
 -- Plugin Configuration
 -- =====================
 -- Make plugins global so it can be accessed from other config files
+
+-- Selected settings (persist theme) helpers (moved to top-level so plugin configs can access them)
+local selected_file = vim.fn.expand("~/.config/nvim-general/.selected.json")
+
+local function read_selected()
+    local t = {}
+    if vim.fn.filereadable(selected_file) == 1 then
+        local lines = vim.fn.readfile(selected_file)
+        if lines then
+            local content = table.concat(lines, "\n")
+            local ok, parsed = pcall(vim.fn.json_decode, content)
+            if ok and type(parsed) == "table" then t = parsed end
+        end
+        return t
+    end
+
+    -- Fallback: migrate legacy files (.selected_theme)
+    local theme_file = vim.fn.expand("~/.config/nvim-general/.selected_theme")
+    if vim.fn.filereadable(theme_file) == 1 then
+        local lines = vim.fn.readfile(theme_file)
+        t.theme = (lines and lines[1]) or t.theme
+    end
+
+    if t.theme then
+        pcall(function()
+            vim.fn.writefile({vim.fn.json_encode(t)}, selected_file)
+        end)
+    end
+
+    return t
+end
+
+local function write_selected(tbl)
+    local ok, err = pcall(function()
+        return vim.fn.writefile({vim.fn.json_encode(tbl)}, selected_file)
+    end)
+    return ok, err
+end
+
 plugins = {
     -- {"neovim/nvim-lspconfig"}, -- Tree-sitter (Syntax Highlighting)
     -- {
@@ -36,13 +75,17 @@ plugins = {
     --     end
     -- }, -- Completion Engine
     {"hrsh7th/nvim-cmp"}, {"hrsh7th/cmp-nvim-lsp"}, {"hrsh7th/cmp-buffer"},
-    {"hrsh7th/cmp-path"}, -- File and Text Search, Terminal Management
+    {"hrsh7th/cmp-path"}, -- Snippet Engine
+    {"L3MON4D3/LuaSnip"}, {"rafamadriz/friendly-snippets"},
+    -- File and Text Search, Terminal Management
     {"kassio/neoterm"}, -- UI Components for inputs
     {"MunifTanjim/nui.nvim"}, -- File and Text Search
     {
         "nvim-telescope/telescope.nvim",
         tag = "0.1.6",
-        dependencies = {"nvim-lua/plenary.nvim"},
+        dependencies = {
+            "nvim-lua/plenary.nvim", "debugloop/telescope-undo.nvim"
+        },
         config = function()
             local telescope = require("telescope")
             local builtin = require("telescope.builtin")
@@ -59,10 +102,40 @@ plugins = {
                     },
                     file_ignore_patterns = {
                         "node_modules/", ".git/", "build/", "dist/", ".next/",
-                        "coverage/", ".turbo/", ".vercel/", "out/"
+                        "coverage/", ".turbo/", ".vercel/", "out/",
+                        ".dart_tool/", ".flutter-plugins",
+                        ".flutter-plugins-dependencies"
+                    }
+                },
+                extensions = {
+                    undo = {
+                        use_delta = true,
+                        side_by_side = false,
+                        layout_strategy = "horizontal",
+                        layout_config = {
+                            width = 0.95,
+                            height = 0.95,
+                            preview_width = 0.6,
+                            prompt_position = "top"
+                        },
+                        mappings = {
+                            i = {
+                                ["<cr>"] = require("telescope-undo.actions").yank_additions,
+                                ["<S-cr>"] = require("telescope-undo.actions").yank_deletions,
+                                ["<C-cr>"] = require("telescope-undo.actions").restore
+                            },
+                            n = {
+                                ["y"] = require("telescope-undo.actions").yank_additions,
+                                ["Y"] = require("telescope-undo.actions").yank_deletions,
+                                ["u"] = require("telescope-undo.actions").restore
+                            }
+                        }
                     }
                 }
             })
+
+            -- Load telescope extensions
+            telescope.load_extension("undo")
 
             -- Keymaps for searching
             local map = vim.keymap.set
@@ -70,12 +143,195 @@ plugins = {
             -- Search in all files in current directory
             map("n", "<leader>ff", builtin.find_files,
                 {desc = "Find files in current directory"})
-            map("n", "<leader>fg", builtin.live_grep,
+            map("n", "<leader>fa", builtin.live_grep,
                 {desc = "Grep text in all files (current directory)"})
 
             -- Search all keymaps/commands
             map("n", "<leader>fc", builtin.keymaps,
                 {desc = "Search all keymaps/commands"})
+
+            -- Search undo history with Telescope
+            map("n", "<leader>fu", "<cmd>Telescope undo<CR>",
+                {desc = "Search undo history (Telescope)"})
+
+            -- Theme picker: browse & preview colorschemes (live preview on move; Enter=apply & persist; Esc/q=restore)
+            local pickers = require("telescope.pickers")
+            local finders = require("telescope.finders")
+            local conf = require("telescope.config").values
+            local actions = require("telescope.actions")
+            local action_state = require("telescope.actions.state")
+            local previewers = require("telescope.previewers")
+
+            -- Selected settings helpers moved to top-level
+
+            -- discover colorschemes & capture current buffer/theme
+
+            local function theme_picker(opts)
+                opts = opts or {}
+                -- Compute available colorschemes and capture current colorscheme at runtime
+                local themes = vim.fn.getcompletion("", "color") or {}
+                table.sort(themes)
+                local original_colorscheme = vim.g.colors_name
+                local orig_buf = vim.api.nvim_get_current_buf()
+
+                -- Preselect active or persisted theme
+                local current_theme = original_colorscheme
+                local sel = read_selected()
+                if (not current_theme or current_theme == "") and sel and
+                    sel.theme then current_theme = sel.theme end
+                if current_theme and current_theme ~= "" then
+                    opts.default_text = current_theme
+                end
+
+                pickers.new(opts, {
+                    prompt_title = "Colorschemes (Live preview on move; Enter=Apply & Exit)",
+                    finder = finders.new_table({
+                        results = themes,
+                        entry_maker = function(entry)
+                            return {
+                                value = entry,
+                                display = entry,
+                                ordinal = entry
+                            }
+                        end
+                    }),
+                    sorter = conf.generic_sorter(opts),
+                    previewer = previewers.new_buffer_previewer({
+                        define_preview = function(self, entry)
+                            -- Use current buffer (or a small sample) for preview
+                            local lines = {}
+                            if vim.api.nvim_buf_is_valid(orig_buf) then
+                                lines = vim.api.nvim_buf_get_lines(orig_buf, 0,
+                                                                   -1, false)
+                            end
+                            if #lines == 0 then
+                                lines = {
+                                    "-- Theme: " .. entry.value, "",
+                                    "function hello(name)",
+                                    "  print('Hello, ' .. name)", "end"
+                                }
+                            end
+
+                            vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1,
+                                                       false, lines)
+
+                            -- Set preview buffer filetype for correct highlighting
+                            local ok, ft = pcall(function()
+                                return vim.api.nvim_buf_get_option(orig_buf,
+                                                                   "filetype")
+                            end)
+                            if ok and ft and ft ~= "" then
+                                vim.api.nvim_buf_set_option(self.state.bufnr,
+                                                            "filetype", ft)
+                            else
+                                vim.api.nvim_buf_set_option(self.state.bufnr,
+                                                            "filetype", "lua")
+                            end
+
+                            -- Apply colorscheme for live preview
+                            if entry and entry.value then
+                                pcall(vim.cmd, "colorscheme " .. entry.value)
+                            end
+                        end
+                    }),
+                    attach_mappings = function(prompt_bufnr, map)
+                        -- Try to preselect current theme (compatible with multiple Telescope versions)
+                        pcall(function()
+                            local picker =
+                                action_state.get_current_picker(prompt_bufnr)
+                            if not picker then return end
+                            for i, v in ipairs(themes) do
+                                if v == current_theme then
+                                    -- Try zero-based index first, then one-based
+                                    pcall(function()
+                                        picker:set_selection(i - 1)
+                                    end)
+                                    pcall(function()
+                                        picker:set_selection(i)
+                                    end)
+                                    break
+                                end
+                            end
+                        end)
+
+                        -- Apply selection and persist
+                        actions.select_default:replace(function()
+                            local selection = action_state.get_selected_entry()
+                            actions.close(prompt_bufnr)
+                            if selection and selection.value then
+                                local ok, err =
+                                    pcall(vim.cmd,
+                                          "colorscheme " .. selection.value)
+                                if ok then
+                                    vim.notify(
+                                        "Applied theme: " .. selection.value,
+                                        vim.log.levels.INFO)
+                                    -- Persist the selected theme into combined settings file
+                                    local s = read_selected()
+                                    s.theme = selection.value
+                                    local write_ok, write_err =
+                                        write_selected(s)
+                                    if write_ok then
+                                        vim.notify(
+                                            "Saved theme to: " .. selected_file,
+                                            vim.log.levels.INFO)
+                                    else
+                                        vim.notify(
+                                            "Failed to save theme: " ..
+                                                tostring(write_err),
+                                            vim.log.levels.ERROR)
+                                    end
+                                else
+                                    vim.notify(
+                                        "Failed to apply theme: " ..
+                                            tostring(err), vim.log.levels.ERROR)
+                                end
+                            end
+                        end)
+
+                        -- Esc/q: cancel and restore original theme
+                        map("i", "<Esc>", function()
+                            actions.close(prompt_bufnr)
+                            if original_colorscheme then
+                                pcall(vim.cmd,
+                                      "colorscheme " .. original_colorscheme)
+                            end
+                        end)
+                        map("n", "q", function()
+                            actions.close(prompt_bufnr)
+                            if original_colorscheme then
+                                pcall(vim.cmd,
+                                      "colorscheme " .. original_colorscheme)
+                            end
+                        end)
+
+                        return true
+                    end
+                }):find()
+            end
+
+            -- Command + keymap to open theme picker with a right-side preview
+            vim.api.nvim_create_user_command("ThemePicker", function()
+                theme_picker({
+                    layout_strategy = "horizontal",
+                    layout_config = {
+                        width = 0.9,
+                        height = 0.9,
+                        preview_width = 0.6
+                    },
+                    prompt_position = "top"
+                })
+            end, {})
+
+            vim.keymap.set("n", "<leader>th", "<cmd>ThemePicker<CR>", {
+                desc = "Theme picker (live preview; Enter=apply, Esc=cancel)"
+            })
+
+            -- Grep content NOT in .gitignore (respects .gitignore patterns)
+            map("n", "<leader>fg", function()
+                builtin.live_grep(
+                    {prompt_title = "Grep (respecting .gitignore)"})
+            end, {desc = "Grep content (respect .gitignore)"})
 
             -- Search in specific subdirectory
             map("n", "<leader>fs", function()
@@ -1150,7 +1406,7 @@ plugins = {
                 end
             })
         end
-    }, -- Colorscheme
+    }, -- Colorschemes
     {
         "catppuccin/nvim",
         name = "catppuccin",
@@ -1166,9 +1422,36 @@ plugins = {
                     cmp = true
                 }
             })
-            vim.cmd.colorscheme("catppuccin")
+            -- Apply persisted theme if available (migrated into combined settings)
+            do
+                local settings = read_selected()
+                if settings and settings.theme and settings.theme ~= "" then
+                    local ok, _ = pcall(vim.cmd,
+                                        "colorscheme " .. settings.theme)
+                    if ok then return end
+                end
+            end
+            if not pcall(vim.cmd, "colorscheme catppuccin-macchiato") then
+                pcall(vim.cmd, "colorscheme catppuccin")
+            end
         end
-    }, -- LSP UI (Lspsaga)
+    }, {"folke/tokyonight.nvim", priority = 1000},
+    {"rebelot/kanagawa.nvim", priority = 1000},
+    {"EdenEast/nightfox.nvim", priority = 1000},
+    {"navarasu/onedark.nvim", priority = 1000},
+    {"rose-pine/neovim", name = "rose-pine", priority = 1000},
+    {"Mofiqul/dracula.nvim", priority = 1000},
+    {"ellisonleao/gruvbox.nvim", priority = 1000},
+    {"sainnhe/everforest", priority = 1000},
+    {"sainnhe/gruvbox-material", priority = 1000},
+    {"projekt0n/github-nvim-theme", priority = 1000},
+    {"marko-cerovac/material.nvim", priority = 1000},
+    {"shaunsingh/nord.nvim", priority = 1000},
+    {"bluz71/vim-nightfly-colors", name = "nightfly", priority = 1000},
+    {"bluz71/vim-moonfly-colors", name = "moonfly", priority = 1000},
+    {"Mofiqul/vscode.nvim", priority = 1000},
+    -- Theme picker moved into main telescope config
+
     {
         "glepnir/lspsaga.nvim",
         event = "LspAttach",
@@ -1390,5 +1673,468 @@ plugins = {
     }, -- DeepSeek Chat
     {
         "nvim-lua/plenary.nvim" -- Already included, but ensuring it's available
+    }, -- Incline.nvim for Floating Statuslines
+    {
+        "b0o/incline.nvim",
+        config = function()
+            require("incline").setup({
+                window = {
+                    margin = {vertical = 0, horizontal = 1},
+                    padding = 1,
+                    padding_char = " ",
+                    placement = {vertical = "top", horizontal = "right"},
+                    zindex = 60,
+                    winhighlight = {
+                        active = {
+                            Normal = "NormalFloat",
+                            FloatBorder = "FloatBorder"
+                        },
+                        inactive = {
+                            Normal = "NormalFloat",
+                            FloatBorder = "FloatBorder"
+                        }
+                    }
+                },
+                hide = {
+                    cursorline = false,
+                    focused_win = false,
+                    only_win = false
+                },
+                render = function(props)
+                    local filename = vim.fn.fnamemodify(vim.api
+                                                            .nvim_buf_get_name(
+                                                            props.buf), ":t")
+                    if filename == "" then
+                        filename = "[No Name]"
+                    end
+
+                    local ft_icon, ft_color =
+                        require("nvim-web-devicons").get_icon_color(filename)
+                    local modified = vim.bo[props.buf].modified and " ●" or ""
+
+                    return {
+                        {ft_icon, guifg = ft_color}, {" "},
+                        {filename .. modified}
+                    }
+                end
+            })
+
+            -- Toggle keymap
+            vim.keymap.set("n", "<leader>it", function()
+                local incline = require("incline")
+                if incline.is_enabled() then
+                    incline.disable()
+                else
+                    incline.enable()
+                end
+            end, {desc = "Toggle Incline"})
+        end
+    }, -- Twilight.nvim for Context Highlighting
+    {
+        "folke/twilight.nvim",
+        config = function()
+            require("twilight").setup({
+                dimming = {
+                    alpha = 0.25,
+                    color = {"Normal", "#ffffff"},
+                    term_bg = "#000000",
+                    inactive = false
+                },
+                context = 20,
+                treesitter = true,
+                expand = {
+                    "function", "method", "table", "if_statement",
+                    "import_statement", "export_statement"
+                },
+                exclude = {}
+            })
+
+            -- Toggle keymap
+            vim.keymap.set("n", "<leader>ttw", "<cmd>Twilight<CR>",
+                           {desc = "Toggle Twilight"})
+            vim.keymap.set("n", "<leader>tth", "<cmd>TwilightEnable<CR>",
+                           {desc = "Enable Twilight"})
+            vim.keymap.set("n", "<leader>ttl", "<cmd>TwilightDisable<CR>",
+                           {desc = "Disable Twilight"})
+        end
+    }, -- AI Commit Message Suggestions
+    {
+        "nvim-lua/plenary.nvim", -- Already included, but ensuring it's available
+        config = function()
+            -- Add nvim-general directory to package.path so we can require local files
+            local config_path = vim.fn.expand("~/.config/nvim-general")
+            package.path = package.path .. ";" .. config_path .. "/?.lua;" ..
+                               config_path .. "/?/init.lua"
+
+            -- Load AI commit plugin
+            local ai_commit = require("ai-commit")
+            ai_commit.setup({
+                api_key = os.getenv("DEEPSEEK_API_KEY") or "",
+                keymaps = {generate = "<leader>cg"}
+            })
+        end
+    }, -- Vim-dadbod - Database interface (PostgreSQL + MongoDB support)
+    {
+        "tpope/vim-dadbod",
+        dependencies = {
+            "kristijanhusak/vim-dadbod-ui",
+            "kristijanhusak/vim-dadbod-completion"
+        },
+        config = function()
+            -- DB UI settings
+            vim.g.db_ui_use_nerd_fonts = 1
+            vim.g.db_ui_show_database_icon = 1
+            vim.g.db_ui_force_echo_notifications = 1
+            vim.g.db_ui_win_position = "right"
+            vim.g.db_ui_winwidth = 40
+
+            -- Save query history
+            vim.g.db_ui_save_location = vim.fn.stdpath("data") .. "/db_ui"
+
+            -- Persistent connections storage
+            vim.g.db_ui_save_connections = 1
+            vim.g.db_ui_tmp_query_location =
+                vim.fn.stdpath("data") .. "/db_ui/tmp"
+
+            -- Database support configuration
+            -- PostgreSQL: Built-in support ✅
+            -- MongoDB: Requires mongosh CLI (install: brew install mongosh)
+            -- Connection examples:
+            --   PostgreSQL: postgresql://user:password@localhost:5432/dbname
+            --   MongoDB:    mongodb://localhost:27017/dbname
+            --   MongoDB:    mongodb://user:password@localhost:27017/dbname
+
+            -- Keymaps
+            local map = vim.keymap.set
+            map("n", "<leader>cdb", "<cmd>DBUIToggle<CR>",
+                {desc = "Database: Toggle UI"})
+            map("n", "<leader>cdba", "<cmd>DBUIAddConnection<CR>",
+                {desc = "Database: Add connection"})
+            map("n", "<leader>cdbf", "<cmd>DBUIFindBuffer<CR>",
+                {desc = "Database: Find buffer"})
+            map("n", "<leader>cdbn", "<cmd>DBUIRenameBuffer<CR>",
+                {desc = "Database: Rename buffer"})
+            map("n", "<leader>cdbi", "<cmd>DBUILastQueryInfo<CR>",
+                {desc = "Database: Last query info"})
+
+            -- Quick reconnect to saved connections
+            map("n", "<leader>cdbr", function()
+                local connections_file =
+                    vim.fn.stdpath("config") .. "/db_ui_connections.json"
+
+                -- Check if connections file exists
+                if vim.fn.filereadable(connections_file) == 0 then
+                    vim.notify(
+                        "No saved connections found. Add connections first with <leader>cdba",
+                        vim.log.levels.WARN)
+                    return
+                end
+
+                -- Read and parse connections
+                local file = io.open(connections_file, "r")
+                if not file then
+                    vim.notify("Could not read connections file",
+                               vim.log.levels.ERROR)
+                    return
+                end
+
+                local content = file:read("*a")
+                file:close()
+
+                local ok, connections = pcall(vim.json.decode, content)
+                if not ok or not connections or #connections == 0 then
+                    vim.notify("No valid connections found", vim.log.levels.WARN)
+                    return
+                end
+
+                -- Use telescope to select connection
+                local pickers = require("telescope.pickers")
+                local finders = require("telescope.finders")
+                local conf = require("telescope.config").values
+                local actions = require("telescope.actions")
+                local action_state = require("telescope.actions.state")
+
+                pickers.new({}, {
+                    prompt_title = "Select Database Connection",
+                    finder = finders.new_table({
+                        results = connections,
+                        entry_maker = function(entry)
+                            local display_name = entry.name or entry.url
+                            return {
+                                value = entry,
+                                display = display_name,
+                                ordinal = display_name
+                            }
+                        end
+                    }),
+                    sorter = conf.generic_sorter({}),
+                    attach_mappings = function(prompt_bufnr)
+                        actions.select_default:replace(function()
+                            local selection = action_state.get_selected_entry()
+                            actions.close(prompt_bufnr)
+
+                            if selection then
+                                -- Set the connection and open DBUI
+                                vim.g.db = selection.value.url
+                                vim.cmd("DBUIToggle")
+                                vim.notify(
+                                    "Connected to: " ..
+                                        (selection.value.name or "database"),
+                                    vim.log.levels.INFO)
+                            end
+                        end)
+                        return true
+                    end
+                }):find()
+            end, {desc = "Database: Reconnect (select from saved)"})
+
+            -- Save current connection
+            map("n", "<leader>cdbs", function()
+                local connections_file =
+                    vim.fn.stdpath("config") .. "/db_ui_connections.json"
+
+                vim.ui.input({prompt = "Connection Name: "}, function(name)
+                    if not name or name == "" then
+                        vim.notify("Connection save cancelled",
+                                   vim.log.levels.WARN)
+                        return
+                    end
+
+                    vim.ui.input({prompt = "Connection URL: "}, function(url)
+                        if not url or url == "" then
+                            vim.notify("Connection save cancelled",
+                                       vim.log.levels.WARN)
+                            return
+                        end
+
+                        -- Read existing connections
+                        local connections = {}
+                        if vim.fn.filereadable(connections_file) == 1 then
+                            local file = io.open(connections_file, "r")
+                            if file then
+                                local content = file:read("*a")
+                                file:close()
+                                local ok, data = pcall(vim.json.decode, content)
+                                if ok and data then
+                                    connections = data
+                                end
+                            end
+                        end
+
+                        -- Add new connection
+                        table.insert(connections, {
+                            name = name,
+                            url = url,
+                            added = os.date("%Y-%m-%d %H:%M:%S")
+                        })
+
+                        -- Save connections
+                        local file = io.open(connections_file, "w")
+                        if file then
+                            file:write(vim.json.encode(connections))
+                            file:close()
+                            vim.notify("Connection '" .. name .. "' saved!",
+                                       vim.log.levels.INFO)
+                        else
+                            vim.notify("Failed to save connection",
+                                       vim.log.levels.ERROR)
+                        end
+                    end)
+                end)
+            end, {desc = "Database: Save connection"})
+
+            -- List all saved connections
+            map("n", "<leader>cdbL", function()
+                local connections_file =
+                    vim.fn.stdpath("config") .. "/db_ui_connections.json"
+
+                if vim.fn.filereadable(connections_file) == 0 then
+                    vim.notify("No saved connections", vim.log.levels.INFO)
+                    return
+                end
+
+                local file = io.open(connections_file, "r")
+                if not file then return end
+
+                local content = file:read("*a")
+                file:close()
+
+                local ok, connections = pcall(vim.json.decode, content)
+                if not ok or not connections or #connections == 0 then
+                    vim.notify("No saved connections", vim.log.levels.INFO)
+                    return
+                end
+
+                -- Display in a buffer
+                local buf = vim.api.nvim_create_buf(false, true)
+                local lines = {"Saved Database Connections:", ""}
+
+                for i, conn in ipairs(connections) do
+                    table.insert(lines, string.format("%d. %s", i, conn.name))
+                    table.insert(lines, string.format("   URL: %s", conn.url))
+                    table.insert(lines, string.format("   Added: %s",
+                                                      conn.added or "unknown"))
+                    table.insert(lines, "")
+                end
+
+                table.insert(lines, "")
+                table.insert(lines, "Press q to close")
+                table.insert(lines, "Use <leader>cdbr to reconnect")
+
+                vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+                vim.api.nvim_buf_set_option(buf, "modifiable", false)
+                vim.api.nvim_buf_set_option(buf, "buftype", "nofile")
+
+                local win = vim.api.nvim_open_win(buf, true, {
+                    relative = "editor",
+                    width = math.floor(vim.o.columns * 0.8),
+                    height = math.floor(vim.o.lines * 0.8),
+                    col = math.floor(vim.o.columns * 0.1),
+                    row = math.floor(vim.o.lines * 0.1),
+                    style = "minimal",
+                    border = "rounded",
+                    title = " Saved Connections ",
+                    title_pos = "center"
+                })
+
+                vim.api.nvim_buf_set_keymap(buf, "n", "q", ":close<CR>",
+                                            {noremap = true, silent = true})
+            end, {desc = "Database: List saved connections"})
+
+            -- Add dadbod completion to nvim-cmp
+            vim.api.nvim_create_autocmd("FileType", {
+                pattern = {"sql", "mysql", "plsql", "mongodb"},
+                callback = function()
+                    local cmp = require("cmp")
+                    local sources = cmp.get_config().sources
+                    table.insert(sources, {name = "vim-dadbod-completion"})
+                    cmp.setup.buffer({sources = sources})
+                end
+            })
+
+            -- Check for database CLI tools on startup
+            vim.defer_fn(function()
+                local has_psql = vim.fn.executable("psql") == 1
+                local has_mongosh = vim.fn.executable("mongosh") == 1
+
+                if not has_psql then
+                    vim.notify(
+                        "PostgreSQL client not found. Install: brew install postgresql",
+                        vim.log.levels.WARN)
+                end
+
+                if not has_mongosh then
+                    vim.notify(
+                        "MongoDB Shell not found. Install: brew install mongosh",
+                        vim.log.levels.WARN)
+                end
+            end, 1000)
+        end
+    }, -- Markdown Preview - Instant split view
+    {
+        "MeanderingProgrammer/render-markdown.nvim",
+        dependencies = {
+            "nvim-treesitter/nvim-treesitter", "nvim-tree/nvim-web-devicons"
+        },
+        ft = {"markdown"},
+        config = function()
+            require("render-markdown").setup({
+                enabled = true,
+                max_file_size = 1.5,
+                debounce = 100,
+                render_modes = {"n", "c"},
+                anti_conceal = {
+                    enabled = true,
+                    ignore = {code_background = true, sign = true}
+                },
+                heading = {
+                    enabled = true,
+                    sign = true,
+                    icons = {
+                        "󰲡 ", "󰲣 ", "󰲥 ", "󰲧 ", "󰲩 ", "󰲫 "
+                    },
+                    width = "full",
+                    backgrounds = {
+                        "RenderMarkdownH1Bg", "RenderMarkdownH2Bg",
+                        "RenderMarkdownH3Bg", "RenderMarkdownH4Bg",
+                        "RenderMarkdownH5Bg", "RenderMarkdownH6Bg"
+                    },
+                    foregrounds = {
+                        "RenderMarkdownH1", "RenderMarkdownH2",
+                        "RenderMarkdownH3", "RenderMarkdownH4",
+                        "RenderMarkdownH5", "RenderMarkdownH6"
+                    }
+                },
+                code = {
+                    enabled = true,
+                    sign = true,
+                    style = "full",
+                    width = "block",
+                    left_pad = 2,
+                    right_pad = 2,
+                    border = "thin",
+                    highlight = "RenderMarkdownCode"
+                },
+                bullet = {
+                    enabled = true,
+                    icons = {"●", "○", "◆", "◇"},
+                    highlight = "RenderMarkdownBullet"
+                }
+            })
+
+            -- Keymaps (only for markdown files)
+            vim.api.nvim_create_autocmd("FileType", {
+                pattern = "markdown",
+                callback = function()
+                    local map = vim.keymap.set
+                    map("n", "<leader>mt", "<cmd>RenderMarkdown toggle<CR>",
+                        {buffer = true, desc = "Markdown: Toggle render"})
+                    map("n", "<leader>me", "<cmd>RenderMarkdown enable<CR>",
+                        {buffer = true, desc = "Markdown: Enable render"})
+                    map("n", "<leader>md", "<cmd>RenderMarkdown disable<CR>",
+                        {buffer = true, desc = "Markdown: Disable render"})
+                end
+            })
+        end
+    }, -- Undo Tree Visualization
+    {
+        "mbbill/undotree",
+        config = function()
+            -- Undotree settings
+            vim.g.undotree_WindowLayout = 2
+            vim.g.undotree_ShortIndicators = 1
+            vim.g.undotree_SplitWidth = 35
+            vim.g.undotree_SetFocusWhenToggle = 1
+            vim.g.undotree_DiffAutoOpen = 1
+            vim.g.undotree_DiffpanelHeight = 10
+            vim.g.undotree_RelativeTimestamp = 1
+            vim.g.undotree_HighlightChangedText = 1
+            vim.g.undotree_HighlightSyntaxAdd = "DiffAdd"
+            vim.g.undotree_HighlightSyntaxChange = "DiffChange"
+            vim.g.undotree_HelpLine = 0
+
+            -- Keymaps
+            local map = vim.keymap.set
+            map("n", "<leader>u", "<cmd>UndotreeToggle<CR>",
+                {desc = "Toggle Undo Tree"})
+            map("n", "<leader>uf", "<cmd>Telescope undo<CR>",
+                {desc = "Undo history (floating preview)"})
+        end
     }
 }
+
+-- Reapply persisted theme on VimEnter in case plugin/theme load order changed
+vim.api.nvim_create_autocmd("VimEnter", {
+    callback = function()
+        local settings = read_selected()
+
+        if settings and settings.theme and settings.theme ~= "" and
+            settings.theme ~= vim.g.colors_name then
+            local ok, _ = pcall(vim.cmd, "colorscheme " .. settings.theme)
+            if not ok then
+                vim.notify("Failed to reapply persisted theme: " ..
+                               settings.theme, vim.log.levels.WARN)
+            end
+        end
+    end
+})

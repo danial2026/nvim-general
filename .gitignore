@@ -1,0 +1,108 @@
+# .gitignore — ignore runtime files, caches and user-specific data for Neovim & plugins
+# This file is intended to keep user/runtime state, caches, generated artifacts and OS/editor junk out of Git.
+
+########################
+# OS / Editor
+########################
+# macOS Finder
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# Editor/IDE directories
+.vscode/
+.idea/
+*.iml
+
+########################
+# Swap / backup / temp
+########################
+# Vim/Neovim swap files
+*.swp
+*.swo
+*.swn
+*~      # editor backup files
+*.orig
+*.rej
+
+# Vim swap-like hidden files
+.*.swp
+
+########################
+# Neovim & plugin runtime / caches
+########################
+# shada / viminfo / undo / sessions
+*.shada
+shada
+shada-*
+*.viminfo
+session.vim
+sessions/
+undo/
+undo/**
+
+# Neovim logs
+nvim.log
+
+# General caches
+.cache/
+.cache/**
+
+# plugin manager generated files (packer / lazy / etc)
+packer_compiled.lua
+lazy-lock.json
+lazy-lock.toml
+lazy-lock.*
+site/pack/*
+
+# Mason & tool installers (often in user data directories; keep here as a safety net)
+mason/
+mason/**
+
+########################
+# Selection caches (local choices)
+########################
+# Combined cache created by the pickers
+.selected.json
+
+########################
+# Language / build artifacts
+########################
+# Node
+node_modules/
+dist/
+build/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Rust/Go and other build outputs
+target/
+bin/
+dist/
+
+# Coverage / test outputs
+coverage/
+*.cover
+*.lcov
+*.log
+
+########################
+# Tags, temporary files
+########################
+tags
+TAGS
+*.log
+
+########################
+# Misc — safe defaults
+########################
+# Avoid committing local-only files
+.env
+.env.local
+local.env
