@@ -4,6 +4,16 @@ Complete reference for all plugins, configs, and keybindings in nvim-general.
 
 ---
 
+## Screenshots
+
+![Example 1](screenshots/example-1.png)
+
+![Example 2](screenshots/example-2.png)
+
+![Example 3](screenshots/example-3.png)
+
+---
+
 ## 🎯 Overview
 
 This is a general-purpose Neovim configuration with:
