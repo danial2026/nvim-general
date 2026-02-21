@@ -639,11 +639,28 @@ end, {desc = "Close tab if multiple tabs, otherwise quit"})
 vim.cmd(
     "cnoreabbrev <expr> q getcmdtype() == ':' && getcmdline() ==# 'q' ? 'Q' : 'q'")
 
+-- Context-aware 'q' mapping: closes definition split or behaves normally
+vim.keymap.set("n", "q", function()
+    if vim.w.is_definition_split then
+        return "<cmd>close<CR>"
+    else
+        return "q"
+    end
+end, { expr = true, silent = true, desc = "Close definition split or record macro" })
+
 -- LSP Keymaps
 -- ============
 vim.keymap.set("n", "K", "<cmd>Lspsaga hover_doc<CR>", {desc = "Hover doc"})
-vim.keymap.set("n", "gd", "<cmd>Lspsaga goto_definition<CR>",
-               {desc = "Goto definition"})
+vim.keymap.set("n", "gd", function()
+    local height = math.floor(vim.o.lines / 3)
+    -- Use 'split' instead of 'botright split' to stay within the current window column
+    vim.cmd(height .. "split")
+    
+    -- Mark this window as a definition split
+    vim.w.is_definition_split = true
+    
+    vim.cmd("Lspsaga goto_definition")
+end, {desc = "Goto definition in bottom split (respects layout, quit with q)"})
 vim.keymap.set("n", "gp", "<cmd>Lspsaga peek_definition<CR>",
                {desc = "Peek definition"})
 vim.keymap.set("n", "gr", "<cmd>Lspsaga finder<CR>", {desc = "Find references"})
