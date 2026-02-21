@@ -86,13 +86,31 @@ _G.custom_tabline = function()
     for tab = 1, last_tab do
         local buflist = vim.fn.tabpagebuflist(tab)
         local winnr = vim.fn.tabpagewinnr(tab)
-        local bufnr = buflist[winnr]
-        local filename = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(bufnr), ":t")
+        local active_bufnr = buflist[winnr]
+        local display_bufnr = active_bufnr
+        local has_non_tree = false
 
-        if filename == "" then filename = "[No Name]" end
+        for _, bufnr in ipairs(buflist) do
+            if vim.bo[bufnr].filetype ~= "NvimTree" then
+                has_non_tree = true
+                if vim.bo[active_bufnr].filetype == "NvimTree" then
+                    display_bufnr = bufnr
+                    break
+                end
+            end
+        end
+
+        local filename
+        if not has_non_tree then
+            filename = "NvimTree"
+        else
+            filename = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(display_bufnr), ":t")
+            if filename == "" then filename = "[No Name]" end
+        end
+
         filename = filename:gsub("%%", "%%%%")
 
-        local modified = vim.bo[bufnr].modified and " ●" or ""
+        local modified = (has_non_tree and vim.bo[display_bufnr].modified) and " ●" or ""
         local hl = (tab == current_tab) and "%#TabLineSel#" or "%#TabLine#"
 
         table.insert(parts, hl)
