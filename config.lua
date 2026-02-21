@@ -77,6 +77,37 @@ vim.opt.expandtab = true -- Expand tabs to spaces
 vim.opt.termguicolors = true -- Enable true colors in terminal
 vim.opt.cursorline = true -- Highlight current line
 
+-- Custom tabline with stable numbering and filename-only titles
+_G.custom_tabline = function()
+    local current_tab = vim.fn.tabpagenr()
+    local last_tab = vim.fn.tabpagenr("$")
+    local parts = {}
+
+    for tab = 1, last_tab do
+        local buflist = vim.fn.tabpagebuflist(tab)
+        local winnr = vim.fn.tabpagewinnr(tab)
+        local bufnr = buflist[winnr]
+        local filename = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(bufnr), ":t")
+
+        if filename == "" then filename = "[No Name]" end
+        filename = filename:gsub("%%", "%%%%")
+
+        local modified = vim.bo[bufnr].modified and " ●" or ""
+        local hl = (tab == current_tab) and "%#TabLineSel#" or "%#TabLine#"
+
+        table.insert(parts, hl)
+        table.insert(parts, "%" .. tab .. "T")
+        table.insert(parts, string.format(" %d:%s%s ", tab, filename, modified))
+    end
+
+    table.insert(parts, "%#TabLineFill#")
+    table.insert(parts, "%T")
+    return table.concat(parts)
+end
+
+vim.opt.showtabline = 2
+vim.opt.tabline = "%!v:lua.custom_tabline()"
+
 -- Neoterm Configuration
 -- =====================
 vim.g.neoterm_size = tostring(math.floor(0.4 * vim.o.columns))
@@ -723,4 +754,3 @@ vim.opt.listchars = {tab = '» ', trail = '·', nbsp = '␣'}
 
 -- focus to NvimTree directly
 vim.api.nvim_set_keymap('n', '<leader>n', ':NvimTreeFocus<CR>', { noremap = true, silent = true })
-
