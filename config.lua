@@ -639,28 +639,43 @@ end, {desc = "Close tab if multiple tabs, otherwise quit"})
 vim.cmd(
     "cnoreabbrev <expr> q getcmdtype() == ':' && getcmdline() ==# 'q' ? 'Q' : 'q'")
 
--- Context-aware 'q' mapping: closes definition split or behaves normally
-vim.keymap.set("n", "q", function()
-    if vim.w.is_definition_split then
-        return "<cmd>close<CR>"
-    else
-        return "q"
-    end
-end, { expr = true, silent = true, desc = "Close definition split or record macro" })
-
 -- LSP Keymaps
 -- ============
 vim.keymap.set("n", "K", "<cmd>Lspsaga hover_doc<CR>", {desc = "Hover doc"})
 vim.keymap.set("n", "gd", function()
-    local height = math.floor(vim.o.lines / 3)
-    -- Use 'split' instead of 'botright split' to stay within the current window column
-    vim.cmd(height .. "split")
-    
-    -- Mark this window as a definition split
-    vim.w.is_definition_split = true
-    
+    local params = vim.lsp.util.make_position_params()
+    -- Use 500ms timeout: fast enough to not lag, long enough for response
+    local results_map, _ = vim.lsp.buf_request_sync(0, "textDocument/definition", params, 500)
+
+    if results_map and not vim.tbl_isempty(results_map) then
+        for _, res in pairs(results_map) do
+            if res.result then
+                local target = res.result[1] or res.result
+                local target_uri = target.uri or target.targetUri
+                if target_uri then
+                    local target_path = vim.uri_to_fname(target_uri)
+                    local current_path = vim.api.nvim_buf_get_name(0)
+                    if target_path ~= current_path then
+                        -- Robust NvimTree state detection
+                        local nvim_tree_ok, nvim_tree_view = pcall(require, "nvim-tree.view")
+                        local tree_was_open = nvim_tree_ok and nvim_tree_view.is_visible()
+
+                        local current_buf = vim.api.nvim_get_current_buf()
+                        vim.cmd("tabnew")
+                        vim.api.nvim_win_set_buf(0, current_buf)
+
+                        if tree_was_open then
+                            vim.cmd("NvimTreeOpen")
+                            vim.cmd("wincmd l") -- focus code window
+                        end
+                    end
+                    break
+                end
+            end
+        end
+    end
     vim.cmd("Lspsaga goto_definition")
-end, {desc = "Goto definition in bottom split (respects layout, quit with q)"})
+end, {desc = "Goto definition in new tab (no tab split)"})
 vim.keymap.set("n", "gp", "<cmd>Lspsaga peek_definition<CR>",
                {desc = "Peek definition"})
 vim.keymap.set("n", "gr", "<cmd>Lspsaga finder<CR>", {desc = "Find references"})
