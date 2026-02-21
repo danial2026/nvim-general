@@ -933,18 +933,10 @@ plugins = {
             local map = vim.keymap.set
             map("n", "<leader>gg", "<cmd>Neogit<CR>", {desc = "Open Neogit"})
 
-            -- Git commit (fixed to use proper API)
+            -- Git commit
             map("n", "<leader>gc",
                 function() require("neogit").open({"commit"}) end,
                 {desc = "Git commit"})
-
-            -- Git push/pull (fixed to use proper API)
-            map("n", "<leader>gp",
-                function() require("neogit").open({"push"}) end,
-                {desc = "Git push"})
-            map("n", "<leader>gP",
-                function() require("neogit").open({"pull"}) end,
-                {desc = "Git pull"})
 
             -- Git add commands
             map("n", "<leader>ga", function()

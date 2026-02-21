@@ -688,3 +688,7 @@ vim.api.nvim_create_autocmd("FileType", {
 })
 
 vim.opt.listchars = {tab = '» ', trail = '·', nbsp = '␣'}
+
+-- focus to NvimTree directly
+vim.api.nvim_set_keymap('n', '<leader>n', ':NvimTreeFocus<CR>', { noremap = true, silent = true })
+

@@ -159,8 +159,6 @@ This is a general-purpose Neovim configuration with:
 | ----------- | ------------------------------- |
 | `<Space>gg` | Open Neogit                     |
 | `<Space>gc` | Git commit                      |
-| `<Space>gp` | Git push                        |
-| `<Space>gP` | Git pull                        |
 | `<Space>ga` | Git add current file            |
 | `<Space>gA` | Git add all files               |
 | `<Space>gs` | Git stage (interactive)         |
