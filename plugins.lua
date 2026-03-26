@@ -329,9 +329,42 @@ plugins = {
 
             -- Grep content NOT in .gitignore (respects .gitignore patterns)
             map("n", "<leader>fg", function()
-                builtin.live_grep(
-                    {prompt_title = "Grep (respecting .gitignore)"})
-            end, {desc = "Grep content (respect .gitignore)"})
+                local builtin = require("telescope.builtin")
+                local previewers = require("telescope.previewers")
+                local conf = require("telescope.config").values
+
+                -- Custom previewer using bat for grep results
+                local bat_previewer = previewers.new_termopen_previewer({
+                    get_command = function(entry)
+                        local filename = entry.filename or entry.path or entry.value or ""
+                        local lnum = tonumber(entry.lnum or entry.line or (entry.value and entry.value:match(":(%d+):"))) or 1
+                        if not filename or filename == "" then
+                            return { "echo", "" }
+                        end
+                        -- Center the preview around the highlighted line (bat supports --line-range)
+                        local context = 20 -- lines before and after; adjust as desired for preview height
+                        local start_line = math.max(lnum - context, 1)
+                        local end_line = lnum + context
+                        local args = {
+                            "--style=numbers,changes",
+                            "--theme=OneHalfDark",
+                            "-l", "conf",
+                            "--color=always",
+                            "--highlight-line", tostring(lnum),
+                            "--line-range", string.format("%d:%d", start_line, end_line),
+                            filename
+                        }
+                        return vim.tbl_flatten({ "bat", args })
+                    end
+                })
+
+                builtin.live_grep({
+                    prompt_title = "Grep (respecting .gitignore)",
+                    previewer = bat_previewer,
+                    use_regex = true,
+                })
+            end, { desc = "Grep content (respect .gitignore)" })
+
 
             -- Search in specific subdirectory
             map("n", "<leader>fs", function()
