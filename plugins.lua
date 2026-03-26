@@ -154,6 +154,60 @@ plugins = {
             map("n", "<leader>fu", "<cmd>Telescope undo<CR>",
                 {desc = "Search undo history (Telescope)"})
 
+            -- Git Explorer: open script output in a floating terminal at the top
+            map("n", "<leader>ge", function()
+                local buf = vim.api.nvim_create_buf(false, true) -- [listed=false, scratch=true]
+                -- Create floating window config like search results
+                local width = math.floor(vim.o.columns * 0.90)
+                local height = math.floor(vim.o.lines * 0.45)
+                local row = math.floor((vim.o.lines - height) / 2)
+                local col = math.floor((vim.o.columns - width) / 2)
+
+                local win = vim.api.nvim_open_win(buf, true, {
+                    relative = "editor",
+                    row = row,
+                    col = col,
+                    width = width,
+                    height = height,
+                    style = "minimal",
+                    border = "rounded",
+                    title = " git-explorer (exit with <ctrl> + c)",
+                    title_pos = "center"
+                })
+
+                -- Optional win highlight for visibility
+                vim.api.nvim_win_set_option(win, "winhighlight", "Normal:NormalFloat,FloatBorder:FloatBorder")
+
+                -- Get current user for correct script path
+                local handle = io.popen("whoami")
+                local user = handle and handle:read("*l") or "root"
+                if handle then handle:close() end
+                local script_path = "/Users/" .. user .. "/.config/nvim-general/scripts/git-explorer.sh"
+
+                -- Start the git-explorer script in the buffer with a bash shell
+                local terminal_job = vim.fn.termopen({"bash", script_path}, {
+                    on_exit = function()
+                        -- close floating window when the script exits
+                        if vim.api.nvim_win_is_valid(win) then
+                            vim.api.nvim_win_close(win, true)
+                        end
+                    end
+                })
+
+                -- ONLY q closes, ESC is left alone for the script
+                vim.keymap.set("n", "q", function()
+                    if vim.api.nvim_win_is_valid(win) then
+                        vim.api.nvim_win_close(win, true)
+                    end
+                end, { buffer = buf, nowait = true })
+
+                -- stay in terminal mode and stop ESC from leaving it
+                vim.keymap.set("t", "<Esc>", "<Esc>", { buffer = buf, noremap = true })
+
+                vim.api.nvim_set_current_win(win)
+                vim.cmd("startinsert")
+            end, {desc = "Git Explorer (floating top window)"})
+
             -- Theme picker: browse & preview colorschemes (live preview on move; Enter=apply & persist; Esc/q=restore)
             local pickers = require("telescope.pickers")
             local finders = require("telescope.finders")
