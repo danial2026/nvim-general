@@ -690,7 +690,14 @@ vim.cmd(
 
 -- LSP Keymaps
 -- ============
-vim.keymap.set("n", "K", "<cmd>Lspsaga hover_doc<CR>", {desc = "Hover doc"})
+vim.keymap.set("n", "K", function()
+    local ok = pcall(function()
+        require("lspsaga.hover"):render_hover_doc()
+    end)
+    if not ok then
+        vim.lsp.buf.hover()
+    end
+end, {desc = "Hover doc"})
 vim.keymap.set("n", "gd", function()
     local params = vim.lsp.util.make_position_params()
     -- Use 500ms timeout: fast enough to not lag, long enough for response
@@ -723,15 +730,43 @@ vim.keymap.set("n", "gd", function()
             end
         end
     end
-    vim.cmd("Lspsaga goto_definition")
+    local ok = pcall(function() require("lspsaga.definition"):init(1, 2) end)
+    if not ok then
+        vim.lsp.buf.definition()
+    end
 end, {desc = "Goto definition in new tab (no tab split)"})
-vim.keymap.set("n", "gp", "<cmd>Lspsaga peek_definition<CR>",
-               {desc = "Peek definition"})
-vim.keymap.set("n", "gr", "<cmd>Lspsaga finder<CR>", {desc = "Find references"})
-vim.keymap.set("n", "<leader>ca", "<cmd>Lspsaga code_action<CR>",
-               {desc = "Code action"})
-vim.keymap.set("n", "<leader>rn", "<cmd>Lspsaga rename<CR>",
-               {desc = "Rename symbol"})
+vim.keymap.set("n", "gp", function()
+    -- lspsaga Ex-commands have changed across versions; prefer the Lua API.
+    local ok = pcall(function() require("lspsaga.definition"):init(1, 1) end)
+    if not ok then
+        -- Best-effort fallback (avoid E492 when lspsaga commands are missing)
+        vim.lsp.buf.definition()
+    end
+end, {desc = "Peek definition"})
+vim.keymap.set("n", "gr", function()
+    local ok = pcall(function()
+        require("lspsaga.finder"):new()
+    end)
+    if not ok then
+        vim.lsp.buf.references()
+    end
+end, {desc = "Find references"})
+vim.keymap.set("n", "<leader>ca", function()
+    local ok = pcall(function()
+        require("lspsaga.codeaction"):code_action()
+    end)
+    if not ok then
+        vim.lsp.buf.code_action()
+    end
+end, {desc = "Code action"})
+vim.keymap.set("n", "<leader>rn", function()
+    local ok = pcall(function()
+        require("lspsaga.rename"):lsp_rename()
+    end)
+    if not ok then
+        vim.lsp.buf.rename()
+    end
+end, {desc = "Rename symbol"})
 vim.keymap.set({"n", "v"}, "<leader>lf", function()
     require("conform").format({async = true, lsp_fallback = true})
 end, {desc = "Format current file"})
