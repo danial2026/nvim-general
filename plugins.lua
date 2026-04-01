@@ -82,7 +82,6 @@ plugins = {
     {"MunifTanjim/nui.nvim"}, -- File and Text Search
     {
         "nvim-telescope/telescope.nvim",
-        tag = "0.1.6",
         dependencies = {
             "nvim-lua/plenary.nvim", "debugloop/telescope-undo.nvim"
         },
