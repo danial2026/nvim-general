@@ -94,6 +94,26 @@ function M.remove_url()
     end)
 end
 
+function M.edit_url(idx)
+    if not idx or idx < 1 or idx > #M.state.urls then return end
+    local entry = M.state.urls[idx]
+    vim.ui.input({prompt = "URL: ", default = entry.url}, function(url)
+        if not url or url == "" then return end
+        vim.ui.input({prompt = "Title: ", default = entry.title}, function(title)
+            if not title or title == "" then title = url end
+            vim.ui.input({prompt = "Priority: ", default = tostring(entry.priority)}, function(priority)
+                entry.url = url
+                entry.title = title
+                entry.priority = tonumber(priority) or entry.priority
+                table.sort(M.state.urls,
+                           function(a, b) return (a.priority or 999) < (b.priority or 999) end)
+                M.save()
+                vim.schedule(function() M.show() end)
+            end)
+        end)
+    end)
+end
+
 function M.ping_url(url)
     local cmd = string.format(
                     'curl -skL -o /dev/null -w "%%{http_code}:%%{time_total}" --connect-timeout %d -A "Mozilla/5.0" "%s"',
@@ -199,7 +219,7 @@ function M.show()
 
     table.insert(lines, "")
     table.insert(lines, "  " .. string.rep("─", usable))
-    table.insert(lines, "  [a] Add    [d] Delete    [r] Refresh    [h] History    [q] Close")
+    table.insert(lines, "  [a] Add    [e] Edit    [d] Delete    [o] Details    [r] Refresh    [h] History    [q] Close")
     if M.state.last_checked then
         table.insert(lines, "  Last checked: " .. M.state.last_checked)
     end
@@ -245,6 +265,43 @@ function M.show()
         end,
         noremap = true, silent = true, desc = "Show ping history"
     })
+    vim.api.nvim_buf_set_keymap(buf, "n", "e", "", {
+        callback = function()
+            local line = vim.fn.line(".")
+            local idx = line - 2
+            if idx < 1 or idx > #M.state.urls then
+                vim.notify("No URL at cursor", vim.log.levels.WARN)
+                return
+            end
+            pcall(vim.api.nvim_win_close, win, true)
+            vim.defer_fn(function() M.edit_url(idx) end, 100)
+        end,
+        noremap = true, silent = true, desc = "Edit URL"
+    })
+    vim.api.nvim_buf_set_keymap(buf, "n", "o", "", {
+        callback = function()
+            local line = vim.fn.line(".")
+            local idx = line - 2
+            if idx < 1 or idx > #M.state.urls then
+                vim.notify("No URL at cursor", vim.log.levels.WARN)
+                return
+            end
+            M.show_detail(win, idx)
+        end,
+        noremap = true, silent = true, desc = "Show URL details"
+    })
+    vim.api.nvim_buf_set_keymap(buf, "n", "<CR>", "", {
+        callback = function()
+            local line = vim.fn.line(".")
+            local idx = line - 2
+            if idx < 1 or idx > #M.state.urls then
+                vim.notify("No URL at cursor", vim.log.levels.WARN)
+                return
+            end
+            M.show_detail(win, idx)
+        end,
+        noremap = true, silent = true, desc = "Show URL details"
+    })
 end
 
 function M.show_history(prev_win)
@@ -270,7 +327,7 @@ function M.show_history(prev_win)
     vim.api.nvim_win_set_option(win, "winhighlight",
                                 "Normal:NormalFloat,FloatBorder:FloatBorder")
 
-    local usable = width - 4
+    local usable = math.max(20, width - 4)
     local lines = {}
     for url, entries in pairs(M.state.history) do
         local display_url = url
@@ -282,10 +339,9 @@ function M.show_history(prev_win)
         if #entries == 0 then
             table.insert(lines, "  (no pings yet)")
         else
-            for _, e in ipairs(entries) do
-                local status = e.up and "UP" or "DOWN"
-                local lat = e.latency and e.latency > 0 and string.format("%dms", math.floor(e.latency * 1000)) or "-"
-                table.insert(lines, string.format("  %s  |  %s  |  %s", e.time, status, lat))
+            local chart_lines = M.render_chart(entries, width)
+            for _, cl in ipairs(chart_lines) do
+                table.insert(lines, cl)
             end
         end
         table.insert(lines, "")
@@ -323,11 +379,126 @@ function M.show_history(prev_win)
     })
 end
 
+function M.render_chart(entries, max_width)
+    local chart_lines = {}
+    if not entries or #entries == 0 then
+        table.insert(chart_lines, "  No ping history yet.")
+        return chart_lines
+    end
+
+    local max_lat = 0
+    for _, e in ipairs(entries) do
+        if e.latency and e.latency > max_lat then max_lat = e.latency end
+    end
+    if max_lat == 0 then max_lat = 0.001 end
+
+    local bar_max = math.max(5, math.min(40, max_width - 30))
+
+    table.insert(chart_lines,
+                 string.format("  %-16s %s %s", "Time", string.rep(" ", bar_max), "Latency"))
+    table.insert(chart_lines, "  " .. string.rep("─", math.min(60, max_width - 4)))
+
+    for _, e in ipairs(entries) do
+        local time_short = e.time:match("(%d+:%d+:%d+)$") or e.time
+        local lat_ms = e.latency and e.latency > 0 and
+                           string.format("%dms", math.floor(e.latency * 1000)) or "-"
+        local bar_len = e.latency and e.latency > 0 and
+                            math.max(1, math.floor((e.latency / max_lat) * bar_max)) or 0
+        local bar = string.rep("█", bar_len)
+        local padded_bar = bar .. string.rep(" ", math.max(0, bar_max + 2 - #bar))
+        table.insert(chart_lines,
+                     string.format("  %-16s %s %s", time_short, padded_bar, lat_ms))
+    end
+
+    return chart_lines
+end
+
+function M.show_detail(prev_win, idx)
+    pcall(vim.api.nvim_win_close, prev_win, true)
+
+    local entry = M.state.urls[idx]
+    if not entry then
+        vim.schedule(function() M.show() end)
+        return
+    end
+    local url_hist = M.state.history[entry.url] or {}
+    local last_result = url_hist[1]
+
+    local buf = vim.api.nvim_create_buf(false, true)
+    local width = math.floor(vim.o.columns * 0.85)
+    local height = math.floor(vim.o.lines * 0.6)
+    local row = math.floor((vim.o.lines - height) / 2)
+    local col = math.floor((vim.o.columns - width) / 2)
+
+    local win = vim.api.nvim_open_win(buf, true, {
+        relative = "editor",
+        row = row,
+        col = col,
+        width = width,
+        height = height,
+        style = "minimal",
+        border = "rounded",
+        title = " " .. entry.title .. " ",
+        title_pos = "center",
+    })
+    vim.api.nvim_win_set_option(win, "winhighlight",
+                                "Normal:NormalFloat,FloatBorder:FloatBorder")
+
+    local usable = math.max(20, width - 4)
+    local lines = {}
+    table.insert(lines, "  Title: " .. (entry.title or ""))
+    table.insert(lines, "  URL: " .. (entry.url or ""))
+    table.insert(lines, "  Priority: " .. tostring(entry.priority or "-"))
+    table.insert(lines, "")
+
+    if last_result then
+        local status = last_result.up and "UP" or "DOWN"
+        local lat = last_result.latency and last_result.latency > 0 and
+                        string.format("%dms", math.floor(last_result.latency * 1000)) or "-"
+        table.insert(lines,
+                     string.format("  Status: %s  |  Latency: %s  |  HTTP: %s",
+                                   status, lat, last_result.http or "-"))
+    end
+    table.insert(lines, "")
+    table.insert(lines, "  " .. string.rep("─", usable))
+    table.insert(lines, "  Latency History")
+    table.insert(lines, "  " .. string.rep("─", usable))
+    table.insert(lines, "")
+
+    local chart_lines = M.render_chart(url_hist, width)
+    for _, cl in ipairs(chart_lines) do
+        table.insert(lines, cl)
+    end
+
+    table.insert(lines, "")
+    table.insert(lines, "  " .. string.rep("─", usable))
+    table.insert(lines, "  [b] Back to monitor    [q] Close")
+
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+    vim.api.nvim_buf_set_option(buf, "modifiable", false)
+
+    vim.api.nvim_buf_set_keymap(buf, "n", "q", "", {
+        callback = function() pcall(vim.api.nvim_win_close, win, true) end,
+        noremap = true, silent = true, desc = "Close details"
+    })
+    vim.api.nvim_buf_set_keymap(buf, "n", "<Esc>", "", {
+        callback = function() pcall(vim.api.nvim_win_close, win, true) end,
+        noremap = true, silent = true, desc = "Close details"
+    })
+    vim.api.nvim_buf_set_keymap(buf, "n", "b", "", {
+        callback = function()
+            pcall(vim.api.nvim_win_close, win, true)
+            vim.defer_fn(function() M.show() end, 100)
+        end,
+        noremap = true, silent = true, desc = "Back to monitor"
+    })
+end
+
 function M.setup()
     M.load()
-    vim.keymap.set("n", "<leader>mu", function()
+    vim.keymap.set("n", "<leader>mp", function()
         M.show()
-    end, {desc = "Open URL monitor"})
+    end, {desc = "Open URL ping monitor"})
 end
 
 return M
