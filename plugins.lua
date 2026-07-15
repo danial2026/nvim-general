@@ -1850,6 +1850,10 @@ plugins = {
                 api_key = os.getenv("DEEPSEEK_API_KEY") or "",
                 keymaps = {generate = "<leader>cg"}
             })
+
+            -- Load URL monitor plugin
+            local url_monitor = require("url-monitor")
+            url_monitor.setup()
         end
     }, -- Vim-dadbod - Database interface (PostgreSQL + MongoDB support)
     {
