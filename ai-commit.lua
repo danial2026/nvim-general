@@ -832,49 +832,47 @@ function M.show_ai_message_in_new_tab(ai_generated_message, changes,
     vim.api.nvim_win_set_buf(win_id, buf)
 
     local lines = {
-        "--- API Response Info ---",
-        string.format("  Response time: %.2f seconds", response_time or 0),
-        string.format("  Model: %s",
-                      api_details and api_details.request.model or "unknown"),
-        string.format("  Temperature: %.2f",
-                      api_details and api_details.request.temperature or 0),
-        string.format("  Max tokens: %d",
-                      api_details and api_details.request.max_tokens or 0)
+        "# AI Generated Commit Message",
+        "",
     }
 
-    -- Add token usage information if available
-    if token_info then
-        if token_info.prompt_tokens then
-            table.insert(lines, string.format("  Prompt tokens: %d",
-                                              token_info.prompt_tokens))
+    if #ai_generated_message > 0 then
+        local ai_message = ai_generated_message[1]
+        table.insert(lines, ai_message.message)
+        table.insert(lines, "")
+
+        if ai_message.body and ai_message.body ~= "" then
+            local body_lines = vim.split(ai_message.body, "\n")
+            for _, body_line in ipairs(body_lines) do
+                local clean_line = body_line:gsub("\r", "")
+                if clean_line:match("%S") then
+                    table.insert(lines, "  " .. clean_line)
+                else
+                    table.insert(lines, "")
+                end
+            end
+        else
+            table.insert(lines, "No body generated - message may be incomplete")
         end
-        if token_info.completion_tokens then
-            table.insert(lines, string.format("  Completion tokens: %d",
-                                              token_info.completion_tokens))
-        end
-        if token_info.total_tokens then
-            table.insert(lines, string.format("  Total tokens: %d",
-                                              token_info.total_tokens))
-        end
+        table.insert(lines, "")
     end
 
-    table.insert(lines, "")
-    table.insert(lines, "--- Staged Changes Summary ---")
-    table.insert(lines,
-                 string.format("  Files changed: %d", changes.stats.file_count))
-    table.insert(lines,
-                 string.format("  Total changes: %d", changes.stats.total))
-    table.insert(lines, string.format("  Additions: %d", changes.stats.added))
-    table.insert(lines, string.format("  Deletions: %d", changes.stats.deleted))
+    table.insert(lines, "---")
     table.insert(lines, "")
 
-    -- Add file type summary
+    table.insert(lines, "### Files Changed")
+    table.insert(lines, "")
+    table.insert(lines,
+                 string.format("Files: **%d** | Changes: **%d** | +%d / -%d",
+                               changes.stats.file_count, changes.stats.total,
+                               changes.stats.added, changes.stats.deleted))
+    table.insert(lines, "")
+
     if changes.file_type_stats and #changes.file_type_stats > 0 then
-        table.insert(lines, "--- Files by Type ---")
         for _, type_stat in ipairs(changes.file_type_stats) do
             if type_stat.total_changes > 0 then
                 table.insert(lines,
-                             string.format("  %s: %d files, %+d -%d lines",
+                             string.format("- **%s**: %d files, +%d / -%d lines",
                                            type_stat.type, type_stat.file_count,
                                            type_stat.additions,
                                            type_stat.deletions))
@@ -883,43 +881,32 @@ function M.show_ai_message_in_new_tab(ai_generated_message, changes,
         table.insert(lines, "")
     end
 
-    table.insert(lines, "--- AI Generated Message ---")
+    table.insert(lines, "### Response")
+    table.insert(lines, "")
+    table.insert(lines,
+                 string.format("%.2fs | %s | temp %.2f",
+                               response_time or 0,
+                               api_details and api_details.request.model or "unknown",
+                               api_details and api_details.request.temperature or 0))
+    if token_info and token_info.total_tokens then
+        table.insert(lines,
+                     string.format("%d tokens (prompt: %d, completion: %d)",
+                                   token_info.total_tokens,
+                                   token_info.prompt_tokens or 0,
+                                   token_info.completion_tokens or 0))
+    end
     table.insert(lines, "")
 
-    if #ai_generated_message > 0 then
-        local ai_message = ai_generated_message[1]
-        table.insert(lines, ai_message.message)
-        table.insert(lines, "")
-
-        if ai_message.body and ai_message.body ~= "" then
-            local body_preview = ai_message.body
-            local body_lines = vim.split(body_preview, "\n")
-            local has_content = false
-
-            for _, body_line in ipairs(body_lines) do
-                local clean_line = body_line:gsub("\r", "")
-                if clean_line:match("%S") then
-                    table.insert(lines, "" .. clean_line)
-                    has_content = true
-                elseif has_content then
-                    table.insert(lines, "")
-                end
-            end
-        else
-            table.insert(lines,
-                         "⚠️  No body generated - message may be incomplete")
-        end
-        table.insert(lines, "")
-    end
-
-    table.insert(lines, "--- ACTIONS ---")
-    table.insert(lines, "  [d] View API details")
+    table.insert(lines, "### Actions")
+    table.insert(lines, "")
+    local action_parts = {"`yyy` Copy", "`C` Commit", "`d` Details"}
     if saved_file then
-        table.insert(lines, "  [e] Edit saved file: " .. saved_file)
+        table.insert(action_parts, "`e` Edit")
     else
-        table.insert(lines, "  [s] Save to file")
+        table.insert(action_parts, "`s` Save")
     end
-    table.insert(lines, "  [q] Close tab")
+    table.insert(action_parts, "`q` Quit")
+    table.insert(lines, "  " .. table.concat(action_parts, "  |  "))
     table.insert(lines, "")
 
     -- Ensure all lines are clean (no newlines)
@@ -979,6 +966,57 @@ function M.show_ai_message_in_new_tab(ai_generated_message, changes,
             desc = "Save AI-generated message to file for editing"
         })
     end
+
+    -- Add keymap for yanking the full commit message
+    vim.api.nvim_buf_set_keymap(buf, "n", "yyy", "", {
+        callback = function()
+            local msg = ai_generated_message[1]
+            local full = msg.message
+            if msg.body and msg.body ~= "" then
+                full = full .. "\n\n" .. msg.body
+            end
+            vim.fn.setreg('"', full)
+            vim.fn.setreg("+", full)
+            vim.notify("Commit message copied to clipboard", vim.log.levels.INFO)
+        end,
+        noremap = true,
+        silent = true,
+        desc = "Yank full commit message to clipboard"
+    })
+
+    -- Add keymap for committing with the generated message
+    vim.api.nvim_buf_set_keymap(buf, "n", "C", "", {
+        callback = function()
+            local msg = ai_generated_message[1]
+            local full = msg.message
+            if msg.body and msg.body ~= "" then
+                full = full .. "\n\n" .. msg.body
+            end
+            local tmpfile = os.tmpname()
+            local f = io.open(tmpfile, "w")
+            if not f then
+                vim.notify("Failed to create temp file for commit",
+                           vim.log.levels.ERROR)
+                return
+            end
+            f:write(full)
+            f:close()
+            local result = vim.fn.system(string.format(
+                                             'git commit -F "%s" 2>&1',
+                                             tmpfile))
+            os.remove(tmpfile)
+            if vim.v.shell_error == 0 then
+                vim.notify("Committed successfully!", vim.log.levels.INFO)
+                vim.cmd("tabclose")
+            else
+                vim.notify("Commit failed: " .. (result or "unknown error"),
+                           vim.log.levels.ERROR)
+            end
+        end,
+        noremap = true,
+        silent = true,
+        desc = "Commit with AI-generated message"
+    })
 
     -- Set buffer options
     vim.api.nvim_buf_set_option(buf, "filetype", "markdown")
