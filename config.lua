@@ -818,3 +818,55 @@ end, {desc = "Previous TODO comment"})
 vim.keymap.set("n", "<leader>st", "<cmd>TodoTelescope<CR>",
                {desc = "Search TODO comments"})
 
+-- Transparent background
+_G.nvim_opaque_bgs = {}
+_G.nvim_transparent = false
+local transparent_groups = {
+    "Normal", "NonText", "NormalFloat",
+    "SignColumn", "LineNr", "CursorLineNr", "CursorLine",
+    "FloatBorder", "WinSeparator", "VertSplit",
+    "NvimTreeNormal", "NvimTreeNormalNC", "NvimTreeWinSeparator",
+    "NvimTreeSignColumn", "NvimTreeEndOfBuffer",
+    "Statusline", "StatuslineNC", "StatusLineTerm",
+    "TabLine", "TabLineFill", "TabLineSel",
+}
+
+local function apply_transparency()
+    for _, group in ipairs(transparent_groups) do
+        local ok, hl = pcall(vim.api.nvim_get_hl, 0, {name = group})
+        if ok and hl then
+            _G.nvim_opaque_bgs[group] = hl.bg
+        end
+        pcall(vim.api.nvim_set_hl, 0, group, {bg = "NONE"})
+    end
+end
+
+local function remove_transparency()
+    for group, bg in pairs(_G.nvim_opaque_bgs) do
+        if bg then
+            pcall(vim.api.nvim_set_hl, 0, group, {bg = bg})
+        else
+            pcall(vim.api.nvim_set_hl, 0, group, {bg = nil})
+        end
+    end
+end
+
+vim.api.nvim_create_autocmd({"VimEnter", "ColorScheme"}, {
+    callback = function()
+        if _G.nvim_transparent then
+            vim.defer_fn(apply_transparency, 10)
+        end
+    end
+})
+
+vim.keymap.set("n", "<leader>uT", function()
+    _G.nvim_transparent = not _G.nvim_transparent
+    if _G.nvim_transparent then
+        apply_transparency()
+        vim.notify("Transparency: ON", vim.log.levels.INFO)
+    else
+        remove_transparency()
+        vim.notify("Transparency: OFF", vim.log.levels.INFO)
+    end
+end, {desc = "Toggle transparent background"})
+
