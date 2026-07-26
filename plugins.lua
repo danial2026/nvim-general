@@ -2197,12 +2197,42 @@ plugins = {
 
             -- Keymaps
             local map = vim.keymap.set
-            map("n", "<leader>u", "<cmd>UndotreeToggle<CR>",
+            map("n", "<leader>ut", "<cmd>UndotreeToggle<CR>",
                 {desc = "Toggle Undo Tree"})
             map("n", "<leader>uf", "<cmd>Telescope undo<CR>",
                 {desc = "Undo history (floating preview)"})
         end
-    }
+    }, -- Indentation Guides
+    {
+        "lukas-reineke/indent-blankline.nvim",
+        config = function()
+            require("ibl").setup({
+                indent = {char = "│"},
+                scope = {enabled = false}
+            })
+        end
+    }, -- Auto-close brackets and quotes
+    {
+        "windwp/nvim-autopairs",
+        event = "InsertEnter",
+        config = function()
+            require("nvim-autopairs").setup()
+        end
+    }, -- TODO/FIXME highlight
+    {
+        "folke/todo-comments.nvim",
+        dependencies = {"nvim-lua/plenary.nvim"},
+        event = "BufRead",
+        config = function()
+            require("todo-comments").setup()
+        end
+    }, -- LSP progress spinner
+    {
+        "j-hui/fidget.nvim",
+        config = function()
+            require("fidget").setup({})
+        end
+    },
 }
 
 -- Reapply persisted theme on VimEnter in case plugin/theme load order changed
