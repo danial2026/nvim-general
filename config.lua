@@ -699,7 +699,9 @@ vim.keymap.set("n", "K", function()
     end
 end, {desc = "Hover doc"})
 vim.keymap.set("n", "gd", function()
-    local params = vim.lsp.util.make_position_params()
+    local clients = vim.lsp.get_clients({bufnr = 0})
+    local offset_encoding = clients[1] and clients[1].offset_encoding or "utf-16"
+    local params = vim.lsp.util.make_position_params(0, offset_encoding)
     -- Use 500ms timeout: fast enough to not lag, long enough for response
     local results_map, _ = vim.lsp.buf_request_sync(0, "textDocument/definition", params, 500)
 
