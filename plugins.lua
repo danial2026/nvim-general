@@ -1019,11 +1019,6 @@ plugins = {
             local map = vim.keymap.set
             map("n", "<leader>gg", "<cmd>Neogit<CR>", {desc = "Open Neogit"})
 
-            -- Git commit
-            map("n", "<leader>gc",
-                function() require("neogit").open({"commit"}) end,
-                {desc = "Git commit"})
-
             -- Git add commands
             map("n", "<leader>ga", function()
                 local file = vim.fn.expand("%")
@@ -1249,19 +1244,16 @@ plugins = {
             end
 
             local function get_current_entry()
-                local view = lib.get_current_view()
-                if not view then return nil end
-                local entry = view:get_current_entry()
-                if not entry then return nil end
+                local ok_view, view = pcall(lib.get_current_view)
+                if not ok_view or not view then return nil end
+                local ok_entry, entry = pcall(view.get_current_entry, view)
+                if not ok_entry or not entry then return nil end
                 return entry
             end
 
             local function get_file_at_cursor()
                 local entry = get_current_entry()
-                if not entry then
-                    vim.notify("No file under cursor", vim.log.levels.WARN)
-                    return nil
-                end
+                if not entry then return nil end
                 return entry.path
             end
 
@@ -1401,44 +1393,20 @@ plugins = {
                     view = {
                         ["<Tab>"] = actions.select_next_entry,
                         ["<S-Tab>"] = actions.select_prev_entry,
-                        ["gf"] = actions.goto_file,
                         ["<C-w><C-f>"] = actions.goto_file_split,
                         ["<C-w>gf"] = actions.goto_file_tab,
                         ["<leader>e"] = actions.focus_files,
                         ["<leader>b"] = actions.toggle_files,
-                        ["gF"] = actions.goto_file_split,
-                        ["gO"] = actions.goto_file_tab,
                         ["g<C-x>"] = actions.cycle_layout,
                         ["[x"] = actions.prev_conflict,
                         ["]x"] = actions.next_conflict,
                         ["<Esc>"] = actions.close,
                         ["q"] = actions.close,
 
-                        ["gb"] = function()
-                            local file = get_file_at_cursor()
-                            if file then
-                                vim.cmd("Gitsigns toggle_current_line_blame")
-                            end
-                        end,
                         ["gB"] = function()
                             local file = get_file_at_cursor()
                             if file then
                                 vim.cmd("Gitsigns blame")
-                            end
-                        end,
-                        ["gy"] = function()
-                            local hash = get_commit_at_entry()
-                            copy_to_clipboard(hash, "Commit hash copied")
-                        end,
-                        ["gY"] = function()
-                            local hash = get_commit_at_entry()
-                            if hash then
-                                local info = git_show_info(hash)
-                                if info then
-                                    copy_to_clipboard(
-                                        info.subject,
-                                        "Commit message copied")
-                                end
                             end
                         end,
                         ["gi"] = function()
@@ -1446,9 +1414,6 @@ plugins = {
                             if hash then
                                 show_commit_float(git_show_info(hash))
                             end
-                        end,
-                        ["gu"] = function()
-                            open_remote_url()
                         end,
                         ["gl"] = function()
                             local file = get_file_at_cursor()
@@ -1508,39 +1473,20 @@ plugins = {
                                 vim.cmd("Gitsigns reset_buffer")
                             end
                         end,
-                        ["tt"] = function()
-                            vim.opt.diffopt:append("iwhite")
-                            vim.notify("Whitespace ignored in diff",
-                                       vim.log.levels.INFO)
-                        end,
-                        ["tT"] = function()
-                            vim.opt.diffopt:remove("iwhite")
-                            vim.notify("Whitespace shown in diff",
-                                       vim.log.levels.INFO)
-                        end,
                         ["g?"] = function()
                             local lines = {
                                 "  Diffview View Panel Keymaps",
                                 "  ─────────────────────────────",
-                                "  gb    Toggle line blame",
                                 "  gB    Open full blame view",
                                 "  gd    Discard hunk (undo section)",
                                 "  gD    Discard file (undo entire file)",
-                                "  gy    Copy commit hash",
-                                "  gY    Copy commit message",
                                 "  gi    Show commit info",
-                                "  gu    Open commit URL in browser",
                                 "  gl    File history (current file)",
                                 "  gL    File history (all files)",
                                 "  gp    Preview hunk",
                                 "  gn    Next hunk",
                                 "  gS    Stage buffer",
                                 "  gU    Unstage buffer",
-                                "  gF    Open full file in split",
-                                "  gO    Open full file in tab",
-                                "  gf    Goto file",
-                                "  tt    Ignore whitespace",
-                                "  tT    Show whitespace",
                                 "  q     Close",
                             }
                             vim.notify(table.concat(lines, "\n"),
@@ -1573,49 +1519,6 @@ plugins = {
                         ["]x"] = actions.next_conflict,
                         ["<Esc>"] = actions.close,
                         ["q"] = actions.close,
-
-                        ["gb"] = function()
-                            local entry = get_current_entry()
-                            if entry then
-                                vim.cmd("Gitsigns toggle_current_line_blame")
-                            end
-                        end,
-                        ["gB"] = function()
-                            local entry = get_current_entry()
-                            if entry then
-                                vim.cmd("Gitsigns blame")
-                            end
-                        end,
-                        ["gy"] = function()
-                            local hash = get_commit_at_entry()
-                            copy_to_clipboard(hash, "Commit hash copied")
-                        end,
-                        ["gY"] = function()
-                            local hash = get_commit_at_entry()
-                            if hash then
-                                local info = git_show_info(hash)
-                                if info then
-                                    copy_to_clipboard(
-                                        info.subject,
-                                        "Commit message copied")
-                                end
-                            end
-                        end,
-                        ["gi"] = function()
-                            local hash = get_commit_at_entry()
-                            if hash then
-                                show_commit_float(git_show_info(hash))
-                            end
-                        end,
-                        ["gu"] = function()
-                            open_remote_url()
-                        end,
-                        ["gl"] = function()
-                            local entry = get_current_entry()
-                            if entry then
-                                vim.cmd("DiffviewFileHistory %")
-                            end
-                        end,
                     },
                     file_history_panel = {
                         ["g!"] = actions.options,
@@ -1639,56 +1542,6 @@ plugins = {
                         ["g<C-x>"] = actions.cycle_layout,
                         ["<Esc>"] = actions.close,
                         ["q"] = actions.close,
-
-                        ["gY"] = function()
-                            local hash = get_commit_at_entry()
-                            if hash then
-                                local info = git_show_info(hash)
-                                if info then
-                                    copy_to_clipboard(
-                                        info.subject,
-                                        "Commit message copied")
-                                end
-                            end
-                        end,
-                        ["gi"] = function()
-                            local hash = get_commit_at_entry()
-                            if hash then
-                                show_commit_float(git_show_info(hash))
-                            end
-                        end,
-                        ["gu"] = function()
-                            open_remote_url()
-                        end,
-                        ["ga"] = function()
-                            vim.ui.input(
-                                {prompt = "Filter by author: "},
-                                function(input)
-                                    if input and input ~= "" then
-                                        vim.cmd(
-                                            "DiffviewFileHistory --author=" ..
-                                                input)
-                                    end
-                                end)
-                        end,
-                        ["gm"] = function()
-                            vim.ui.input(
-                                {prompt = "Search commit messages: "},
-                                function(input)
-                                    if input and input ~= "" then
-                                        vim.cmd(
-                                            "DiffviewFileHistory --grep=" ..
-                                                input)
-                                    end
-                                end)
-                        end,
-                        ["g-"] = function()
-                            vim.cmd("DiffviewFileHistory --skip=" ..
-                                        vim.b.dv_skip or 0 + 50)
-                        end,
-                        ["g="] = function()
-                            vim.cmd("DiffviewFileHistory")
-                        end,
                     },
                     option_panel = {
                         ["<Tab>"] = actions.select_entry,

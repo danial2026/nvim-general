@@ -167,7 +167,6 @@ This is a general-purpose Neovim configuration with:
 | ----------- | ------------------------------- |
 | `<Space>gg` | Open Neogit                     |
 | `<Space>ge` | Git Explorer (floating window)  |
-| `<Space>gc` | Git commit                      |
 | `<Space>ga` | Git add current file            |
 | `<Space>gA` | Git add all files               |
 | `<Space>gs` | Git stage (interactive)         |
@@ -185,48 +184,17 @@ This is a general-purpose Neovim configuration with:
 | Keymap | Action                          |
 | ------ | ------------------------------- |
 | `g?`   | Show all keymaps                |
+| `gB`   | Open full blame view            |
 | `gd`   | Discard hunk (undo section)     |
 | `gD`   | Discard file (undo entire file) |
-| `gb`   | Toggle line blame               |
-| `gB`   | Open full blame view            |
-| `gy`   | Copy commit hash                |
-| `gY`   | Copy commit message             |
 | `gi`   | Show commit info                |
-| `gu`   | Open commit URL in browser      |
 | `gl`   | File history (current file)     |
 | `gL`   | File history (all files)        |
 | `gp`   | Preview hunk                    |
 | `gn`   | Next hunk                       |
 | `gS`   | Stage buffer                    |
 | `gU`   | Unstage buffer                  |
-| `gF`   | Open full file in split         |
-| `gO`   | Open full file in tab           |
-| `gf`   | Goto file                       |
-| `tt`   | Ignore whitespace in diff       |
-| `tT`   | Show whitespace in diff         |
 | `q`    | Close diffview                  |
-
-**File panel additions (GitLens-like):**
-| Keymap | Action                     |
-| ------ | -------------------------- |
-| `gb`   | Toggle line blame          |
-| `gB`   | Open full blame view       |
-| `gy`   | Copy commit hash           |
-| `gY`   | Copy commit message        |
-| `gi`   | Show commit info           |
-| `gu`   | Open commit URL in browser |
-| `gl`   | File history for file      |
-
-**File history panel additions (GitLens-like):**
-| Keymap | Action                     |
-| ------ | -------------------------- |
-| `gY`   | Copy commit message        |
-| `gi`   | Show commit info           |
-| `gu`   | Open commit URL in browser |
-| `ga`   | Filter by author           |
-| `gm`   | Search commit messages     |
-| `g-`   | Skip back 50 commits       |
-| `g=`   | Reset skip                 |
 
 ### Git Hunks
 | Keymap      | Action            |
@@ -501,7 +469,6 @@ URLs are pinged via curl and displayed with status/latency. History with latency
 <Space>gg   # Open Neogit
 <Space>ge   # Git Explorer (floating terminal)
 <Space>gs   # Stage files interactively
-<Space>gc   # Commit
 <Space>gp   # Push
 ```
 
@@ -740,7 +707,6 @@ debounce = 200,  -- From 100 to 200
 1. **Quick stage and commit:**
    ```
    <Space>gs  # Interactive stage
-   <Space>gc  # Commit
    ```
 
 2. **Review changes before committing:**
