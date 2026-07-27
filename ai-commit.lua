@@ -660,9 +660,9 @@ function M.generate_ai_message()
         vim.notify("Diff is large (" .. #full_diff ..
                        " chars). Using summarized diff.", vim.log.levels.WARN)
         local diff_summary = M.create_diff_summary(changes)
-        prompt = prompt:gsub("{{DIFF}}", diff_summary)
+        prompt = prompt:gsub("{{DIFF}}", diff_summary:gsub("%%", "%%%%"))
     else
-        prompt = prompt:gsub("{{DIFF}}", full_diff)
+        prompt = prompt:gsub("{{DIFF}}", full_diff:gsub("%%", "%%%%"))
     end
 
     -- Check if curl is available
