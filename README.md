@@ -90,6 +90,13 @@ This is a general-purpose Neovim configuration with:
 - **nui.nvim** - UI component library
 - **plenary.nvim** - Lua utilities
 - **undotree** - Visual undo tree browser
+- **indent-blankline.nvim** - Indentation guides
+- **nvim-autopairs** - Auto-close brackets and quotes
+- **todo-comments.nvim** - TODO/FIXME comment highlighting
+- **fidget.nvim** - LSP progress spinner
+
+### URL Monitoring
+- **URL Monitor** - Ping and monitor URLs
 
 ---
 
@@ -108,6 +115,7 @@ This is a general-purpose Neovim configuration with:
 | ---------- | ------------------------------- |
 | `<Space>e` | Toggle file explorer (NvimTree) |
 | `<Space>o` | Open new tab with NvimTree      |
+| `<Space>n` | Focus NvimTree                  |
 | `<Space>a` | Toggle Alpha dashboard          |
 
 ### Search (Telescope)
@@ -128,7 +136,7 @@ This is a general-purpose Neovim configuration with:
 ### Undo/Redo
 | Keymap      | Action                          |
 | ----------- | ------------------------------- |
-| `<Space>u`  | Toggle Undo Tree (side panel)   |
+| `<Space>ut` | Toggle Undo Tree (side panel)   |
 | `<Space>uf` | Undo history (floating preview) |
 | `<Space>fu` | Search undo history (Telescope) |
 
@@ -158,6 +166,7 @@ This is a general-purpose Neovim configuration with:
 | Keymap      | Action                          |
 | ----------- | ------------------------------- |
 | `<Space>gg` | Open Neogit                     |
+| `<Space>ge` | Git Explorer (floating window)  |
 | `<Space>gc` | Git commit                      |
 | `<Space>ga` | Git add current file            |
 | `<Space>gA` | Git add all files               |
@@ -217,6 +226,13 @@ This is a general-purpose Neovim configuration with:
 | `<Space>me` | Enable rendering  |
 | `<Space>md` | Disable rendering |
 
+### TODO Comments
+| Keymap      | Action                   |
+| ----------- | ------------------------ |
+| `]t`        | Next TODO/FIXME comment  |
+| `[t`        | Previous TODO/FIXME comment |
+| `<Space>st` | Search TODO comments     |
+
 ### Terminal
 | Keymap             | Action               |
 | ------------------ | -------------------- |
@@ -246,9 +262,15 @@ This is a general-purpose Neovim configuration with:
 | Keymap       | Action                               |
 | ------------ | ------------------------------------ |
 | `<Space>it`  | Toggle Incline (floating statusline) |
+| `<Space>uT`  | Toggle transparent background        |
 | `<Space>ttw` | Toggle Twilight                      |
 | `<Space>tth` | Enable Twilight                      |
 | `<Space>ttl` | Disable Twilight                     |
+
+### URL Monitor
+| Keymap      | Action                  |
+| ----------- | ----------------------- |
+| `<Space>mp` | Open URL ping monitor   |
 
 ### Clipboard
 | Keymap      | Action                        |
@@ -276,7 +298,13 @@ nvim
 <Space>cg  # Generate commit
 ```
 
-Press `a` to accept, `e` to edit, `q` to close.
+**In the commit message tab:**
+- `yyy` - Copy message to clipboard
+- `C` - Commit directly
+- `d` - View API details
+- `s` - Save to file for editing
+- `e` - Edit saved file
+- `q` - Close tab
 
 **Configuration:** Edit `ai-commit.lua` to customize model, temperature, prompt templates.
 
@@ -295,7 +323,7 @@ Large centered floating window with:
 
 **Side Panel Undo Tree:**
 ```
-<Space>u   # Toggle visual undo tree (side panel)
+<Space>ut   # Toggle visual undo tree (side panel)
 ```
 
 Traditional tree view shows:
@@ -332,7 +360,7 @@ Features:
 - `y/Y` - Yank additions/deletions (normal mode)
 - `u` - Restore (normal mode)
 
-**In Undo Tree (`<Space>u`):**
+**In Undo Tree (`<Space>ut`):**
 - `j/k` - Navigate through history
 - `<Enter>` - Restore to selected state
 - `q` - Close undo tree
@@ -368,6 +396,26 @@ SQLite:     sqlite:///path/to/db.db
 
 **Storage:** `~/.config/nvim-general/db_ui_connections.json`
 
+### URL Monitor
+
+**Open monitor:**
+```
+<Space>mp  # Opens URL ping monitor
+```
+
+**Inside the monitor:**
+```
+a   - Add URL (with title and priority)
+e   - Edit URL, title, or priority
+d   - Remove URL
+o   - View detail with latency chart
+r   - Refresh all pings
+h   - View ping history
+q   - Close
+```
+
+URLs are pinged via curl and displayed with status/latency. History with latency charts is persisted across sessions.
+
 ### Snippets
 
 **Browse all snippets:**
@@ -402,6 +450,7 @@ SQLite:     sqlite:///path/to/db.db
 **Basic workflow:**
 ```
 <Space>gg   # Open Neogit
+<Space>ge   # Git Explorer (floating terminal)
 <Space>gs   # Stage files interactively
 <Space>gc   # Commit
 <Space>gp   # Push
@@ -443,6 +492,7 @@ SQLite:     sqlite:///path/to/db.db
 ├── plugins.lua             # All plugin configurations
 ├── ai-commit.lua           # AI commit generator
 ├── commit-rules.lua        # Commit message rules
+├── url-monitor.lua         # URL ping monitor
 ├── db_ui_connections.json  # Saved database connections
 ├── README.md               # This file
 └── snippets/               # Custom snippets
@@ -681,7 +731,7 @@ debounce = 200,  -- From 100 to 200
    ```
    <Space>uf  # Floating undo preview (large centered window)
               # Find that code you deleted 20 changes ago
-   <Space>u   # Side panel tree view (traditional layout)
+   <Space>ut  # Side panel tree view (traditional layout)
    ```
 
 ### LSP
@@ -775,6 +825,7 @@ In `plugins.lua`, comment out or add `enabled = false`:
 - File explorer and fuzzy finder
 - Terminal management
 - Session management
+- URL ping monitoring with latency charts
 - Beautiful UI with Catppuccin theme
 
 **Quick Start:**
@@ -783,9 +834,11 @@ In `plugins.lua`, comment out or add `enabled = false`:
 <Space>fa   # Search text (all files)
 <Space>fg   # Search text (respects .gitignore)
 <Space>uf   # Undo history (floating preview)
-<Space>u    # Undo tree (side panel)
+<Space>ut   # Undo tree (side panel)
 <Space>e    # File tree
 <Space>cdb  # Database
+<Space>mp   # URL Monitor
+<Space>st   # TODO comments
 <Space>snp  # Snippets
 <Space>gg   # Git
 <Space>cg   # AI commit
