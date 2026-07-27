@@ -173,7 +173,7 @@ This is a general-purpose Neovim configuration with:
 | `<Space>gs` | Git stage (interactive)         |
 | `<Space>gu` | Git unstage (interactive)       |
 | `<Space>gL` | Git log graph                   |
-| `<Space>gv` | Diffview                        |
+| `<Space>gv` | Open Diffview                   |
 | `<Space>gV` | Close Diffview                  |
 | `<Space>gh` | Git file history (all)          |
 | `<Space>gf` | Git file history (current file) |
