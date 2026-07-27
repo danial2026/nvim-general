@@ -1464,15 +1464,25 @@ plugins = {
                         end,
                         ["gd"] = function()
                             local file = get_file_at_cursor()
-                            if file then
+                            if not file then return end
+                            local root = get_git_root()
+                            if root == "" then return end
+                            lib.close_all()
+                            vim.defer_fn(function()
+                                vim.cmd("edit " .. file)
                                 vim.cmd("Gitsigns reset_hunk")
-                            end
+                            end, 50)
                         end,
                         ["gD"] = function()
                             local file = get_file_at_cursor()
-                            if file then
-                                vim.cmd("Gitsigns reset_buffer")
-                            end
+                            if not file then return end
+                            local root = get_git_root()
+                            if root == "" then return end
+                            vim.fn.system({"git", "-C", root, "checkout", "--",
+                                          file})
+                            vim.notify("Restored: " .. file,
+                                       vim.log.levels.INFO)
+                            vim.cmd("DiffviewRefresh")
                         end,
                         ["gp"] = function()
                             local file = get_file_at_cursor()
