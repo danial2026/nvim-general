@@ -1232,37 +1232,26 @@ plugins = {
         dependencies = {"nvim-lua/plenary.nvim"},
         config = function()
             local actions = require("diffview.actions")
-            local lib = require("diffview.lib")
 
-            local function get_current_entry()
-                local ok_view, view = pcall(lib.get_current_view)
-                if not ok_view or not view then return nil end
-                local ok_entry, entry = pcall(view.get_current_entry, view)
-                if not ok_entry or not entry then return nil end
-                return entry
+            local function git_root()
+                local r = vim.fn.systemlist(
+                              {"git", "rev-parse", "--show-toplevel"})
+                return #r > 0 and r[1] or nil
             end
 
-            local function get_file_at_cursor()
-                local entry = get_current_entry()
-                if not entry then return nil end
+            local function file_at_cursor()
+                local ok, view = pcall(require("diffview.lib").get_current_view)
+                if not ok or not view then return nil end
+                local ok2, entry = pcall(view.get_current_entry, view)
+                if not ok2 or not entry then return nil end
                 return entry.path
             end
 
-            local function apply_on_file(file, cmd)
-                if not file then return end
-                local root = vim.fn.systemlist(
-                                 {"git", "rev-parse", "--show-toplevel"})[1]
-                if not root or root == "" then return end
-                local full = root .. "/" .. file
-                local bufnr = vim.fn.bufnr(full)
-                if bufnr == -1 then
-                    bufnr = vim.fn.bufadd(full)
-                end
-                vim.fn.bufload(bufnr)
-                vim.api.nvim_buf_call(bufnr, function()
-                    vim.cmd(cmd)
-                end)
-                vim.cmd("DiffviewRefresh")
+            local function run_git(git_args)
+                local root = git_root()
+                if not root then return end
+                vim.fn.system(vim.list_extend(
+                                  {"git", "-C", root}, git_args))
             end
 
             require("diffview").setup({
@@ -1318,23 +1307,24 @@ plugins = {
                         ["q"] = actions.close,
 
                         ["gd"] = function()
-                            apply_on_file(get_file_at_cursor(),
-                                          "Gitsigns reset_hunk")
+                            local file = file_at_cursor()
+                            if not file then return end
+                            vim.cmd("!git checkout -p -- " ..
+                                        vim.fn.shellescape(file))
+                            vim.cmd("DiffviewRefresh")
                         end,
                         ["gD"] = function()
-                            local file = get_file_at_cursor()
+                            local file = file_at_cursor()
                             if not file then return end
-                            local root = vim.fn.systemlist(
-                                             {"git", "rev-parse",
-                                              "--show-toplevel"})[1]
-                            if not root or root == "" then return end
-                            vim.fn.system(
-                                {"git", "-C", root, "checkout", "--", file})
+                            run_git({"checkout", "--", file})
                             vim.cmd("DiffviewRefresh")
                         end,
                         ["gS"] = function()
-                            apply_on_file(get_file_at_cursor(),
-                                          "Gitsigns stage_hunk")
+                            local file = file_at_cursor()
+                            if not file then return end
+                            vim.cmd("!git add -p -- " ..
+                                        vim.fn.shellescape(file))
+                            vim.cmd("DiffviewRefresh")
                         end,
                     },
                     file_panel = {
