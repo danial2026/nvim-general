@@ -833,9 +833,9 @@ plugins = {
                     untracked = {text = "┆"}
                 },
                 signcolumn = true,
-                numhl = false,
+                numhl = true,
                 linehl = false,
-                word_diff = false,
+                word_diff = true,
                 watch_gitdir = {interval = 1000, follow_files = true},
                 attach_to_untracked = true,
                 current_line_blame = true,
@@ -886,16 +886,59 @@ plugins = {
                     -- Actions
                     map("n", "<leader>hs", gs.stage_hunk, {desc = "Stage hunk"})
                     map("n", "<leader>hr", gs.reset_hunk, {desc = "Reset hunk"})
+                    local function visual_range()
+                        return {
+                            math.min(vim.fn.line("."), vim.fn.line("v")),
+                            math.max(vim.fn.line("."), vim.fn.line("v"))
+                        }
+                    end
+
+                    local function save_backup_and_revert(range)
+                        local file = vim.fn.expand("%:p")
+                        local lines = vim.fn.getline(range[1], range[2])
+                        vim.g.gitsigns_undo_backup = {
+                            file = file,
+                            start = range[1],
+                            ["end"] = range[2],
+                            lines = lines,
+                            timestamp = os.time()
+                        }
+                        gs.reset_hunk(range)
+                        vim.notify(string.format(
+                            "Reverted lines %d-%d. 'u' to undo, '<leader>hU' to redo.",
+                            range[1], range[2]))
+                    end
+
                     map("v", "<leader>hs", function()
-                        gs.stage_hunk({vim.fn.line("."), vim.fn.line("v")})
+                        gs.stage_hunk(visual_range())
                     end, {desc = "Stage selected hunk"})
                     map("v", "<leader>hr", function()
-                        gs.reset_hunk({vim.fn.line("."), vim.fn.line("v")})
-                    end, {desc = "Reset selected hunk"})
+                        save_backup_and_revert(visual_range())
+                    end, {desc = "Revert selected lines"})
+                    map("v", "<leader>hu", function()
+                        save_backup_and_revert(visual_range())
+                    end, {desc = "Revert selected lines (with redo backup)"})
                     map("n", "<leader>hS", gs.stage_buffer,
                         {desc = "Stage buffer"})
                     map("n", "<leader>hu", gs.undo_stage_hunk,
                         {desc = "Undo stage hunk"})
+                    map("n", "<leader>hU", function()
+                        local b = vim.g.gitsigns_undo_backup
+                        if not b or not b.file then
+                            vim.notify("No backup to restore", vim.log.levels.WARN)
+                            return
+                        end
+                        local file = vim.fn.expand("%:p")
+                        if b.file ~= file then
+                            vim.notify("File mismatch. Backup is for: " .. b.file,
+                                vim.log.levels.WARN)
+                            return
+                        end
+                        vim.api.nvim_buf_set_lines(0, b.start - 1, b["end"], false, b.lines)
+                        vim.notify(string.format(
+                            "Restored lines %d-%d. 'u' to revert again.",
+                            b.start, b["end"]))
+                    end, {desc = "Redo: restore last reverted selection"})
                     map("n", "<leader>hR", gs.reset_buffer,
                         {desc = "Reset buffer"})
                     map("n", "<leader>hp", gs.preview_hunk,
@@ -1309,6 +1352,18 @@ plugins = {
                         ["gd"] = function()
                             local file = file_at_cursor()
                             if not file then return end
+                            local root = git_root()
+                            if root then
+                                local fp = root .. "/" .. tostring(file)
+                                local f = io.open(fp, "r")
+                                if f then
+                                    vim.g.diffview_undo_backup = {
+                                        file = tostring(file),
+                                        content = f:read("*a"),
+                                        timestamp = os.time()
+                                    }; f:close()
+                                end
+                            end
                             vim.cmd("!git checkout -p -- " ..
                                         vim.fn.shellescape(file))
                             vim.cmd("DiffviewRefresh")
@@ -1316,6 +1371,18 @@ plugins = {
                         ["gD"] = function()
                             local file = file_at_cursor()
                             if not file then return end
+                            local root = git_root()
+                            if root then
+                                local fp = root .. "/" .. tostring(file)
+                                local f = io.open(fp, "r")
+                                if f then
+                                    vim.g.diffview_undo_backup = {
+                                        file = tostring(file),
+                                        content = f:read("*a"),
+                                        timestamp = os.time()
+                                    }; f:close()
+                                end
+                            end
                             run_git({"checkout", "--", file})
                             vim.cmd("DiffviewRefresh")
                         end,
@@ -1326,6 +1393,84 @@ plugins = {
                                         vim.fn.shellescape(file))
                             vim.cmd("DiffviewRefresh")
                         end,
+                        ["<leader>hU"] = function()
+                            local b = vim.g.diffview_undo_backup
+                            if not b or not b.content then
+                                vim.notify("No backup to restore",
+                                    vim.log.levels.WARN)
+                                return
+                            end
+                            local file = file_at_cursor()
+                            if not file then return end
+                            if tostring(b.file) ~= tostring(file) then
+                                vim.notify("File mismatch. Backup is for: " ..
+                                    tostring(b.file), vim.log.levels.WARN)
+                                return
+                            end
+                            local root = git_root()
+                            if not root then return end
+                            local fp = root .. "/" .. tostring(file)
+                            local f = io.open(fp, "w")
+                            if f then
+                                f:write(b.content); f:close()
+                                vim.cmd("DiffviewRefresh")
+                                vim.notify("Restored file from backup")
+                            else
+                                vim.notify("Cannot write: " .. fp,
+                                    vim.log.levels.ERROR)
+                            end
+                        end,
+                        -- Visual mode: revert selected lines
+                        { "v", "<leader>hu", function()
+                            local file = file_at_cursor()
+                            if not file then return end
+                            local root = git_root()
+                            if not root then return end
+
+                            local fp = root .. "/" .. tostring(file)
+                            local f = io.open(fp, "r")
+                            if f then
+                                vim.g.diffview_undo_backup = {
+                                    file = tostring(file),
+                                    content = f:read("*a"),
+                                    timestamp = os.time()
+                                }; f:close()
+                            end
+
+                            local s = math.min(vim.fn.line("."),
+                                               vim.fn.line("v"))
+                            local e = math.max(vim.fn.line("."),
+                                               vim.fn.line("v"))
+
+                            local diff = vim.fn.systemlist({
+                                "git", "-C", root, "diff",
+                                "-U1",
+                                "-L" .. s .. "," .. e .. ":" ..
+                                    tostring(file),
+                                "--", tostring(file)
+                            })
+
+                            if #diff > 1 then
+                                local tmp = os.tmpname()
+                                local fw = io.open(tmp, "w")
+                                if fw then
+                                    fw:write(table.concat(diff, "\n"))
+                                    fw:close()
+                                    vim.fn.system({
+                                        "git", "-C", root,
+                                        "apply", "-R", tmp
+                                    })
+                                    os.remove(tmp)
+                                end
+                                vim.cmd("DiffviewRefresh")
+                                vim.notify(string.format(
+                                    "Reverted lines %d-%d. '<leader>hU' to redo.",
+                                    s, e))
+                            else
+                                vim.notify("No changes to revert in selected range",
+                                    vim.log.levels.INFO)
+                            end
+                        end},
                     },
                     file_panel = {
                         ["j"] = actions.next_entry,
