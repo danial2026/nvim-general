@@ -173,11 +173,56 @@ This is a general-purpose Neovim configuration with:
 | `<Space>gs` | Git stage (interactive)         |
 | `<Space>gu` | Git unstage (interactive)       |
 | `<Space>gL` | Git log graph                   |
-| `<Space>gv` | Open Diffview                   |
+| `<Space>gv` | Diffview                        |
 | `<Space>gV` | Close Diffview                  |
 | `<Space>gh` | Git file history (all)          |
 | `<Space>gf` | Git file history (current file) |
 | `<Space>gl` | Git log (custom)                |
+
+### Diffview (GitLens-like keymaps)
+
+**Inside the diff view (press `g?` for help):**
+| Keymap | Action                     |
+| ------ | -------------------------- |
+| `g?`   | Show keymap help           |
+| `gb`   | Toggle line blame          |
+| `gB`   | Open full blame view       |
+| `gy`   | Copy commit hash           |
+| `gY`   | Copy commit message        |
+| `gi`   | Show commit info           |
+| `gu`   | Open commit URL in browser |
+| `gl`   | File history (current)     |
+| `gL`   | File history (all)         |
+| `gp`   | Preview hunk               |
+| `gn`   | Next hunk                  |
+| `gS`   | Stage buffer               |
+| `gU`   | Unstage buffer             |
+| `tt`   | Toggle whitespace (ignore) |
+| `tT`   | Toggle whitespace (show)   |
+| `gf`   | Goto file                  |
+| `q`    | Close diffview             |
+
+**File panel additions (GitLens-like):**
+| Keymap | Action                     |
+| ------ | -------------------------- |
+| `gb`   | Toggle line blame          |
+| `gB`   | Open full blame view       |
+| `gy`   | Copy commit hash           |
+| `gY`   | Copy commit message        |
+| `gi`   | Show commit info           |
+| `gu`   | Open commit URL in browser |
+| `gl`   | File history for file      |
+
+**File history panel additions (GitLens-like):**
+| Keymap | Action                     |
+| ------ | -------------------------- |
+| `gY`   | Copy commit message        |
+| `gi`   | Show commit info           |
+| `gu`   | Open commit URL in browser |
+| `ga`   | Filter by author           |
+| `gm`   | Search commit messages     |
+| `g-`   | Skip back 50 commits       |
+| `g=`   | Reset skip                 |
 
 ### Git Hunks
 | Keymap      | Action            |

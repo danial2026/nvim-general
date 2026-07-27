@@ -1236,6 +1236,129 @@ plugins = {
         "sindrets/diffview.nvim",
         dependencies = {"nvim-lua/plenary.nvim"},
         config = function()
+            local actions = require("diffview.actions")
+            local lib = require("diffview.lib")
+
+            local function git(cmd)
+                return vim.fn.systemlist(cmd)
+            end
+
+            local function git_first(cmd)
+                local r = git(cmd)
+                return #r > 0 and r[1] or ""
+            end
+
+            local function get_current_entry()
+                local view = lib.get_current_view()
+                if not view then return nil end
+                local entry = view:get_current_entry()
+                if not entry then return nil end
+                return entry
+            end
+
+            local function get_file_at_cursor()
+                local entry = get_current_entry()
+                if not entry then
+                    vim.notify("No file under cursor", vim.log.levels.WARN)
+                    return nil
+                end
+                return entry.path
+            end
+
+            local function get_git_root()
+                return git_first({"git", "rev-parse", "--show-toplevel"})
+            end
+
+            local function git_show_info(ref)
+                local info = git({"git", "show", "--no-patch",
+                                  "--format=%H%n%an%n%ae%n%aI%n%s", ref})
+                if #info < 5 then
+                    vim.notify("No commit info found", vim.log.levels.WARN)
+                    return nil
+                end
+                return {hash = info[1], author = info[2], email = info[3],
+                        date = info[4], subject = info[5]}
+            end
+
+            local function show_commit_float(info)
+                if not info then return end
+                local buf = vim.api.nvim_create_buf(false, true)
+                local width = 72
+                local height = 12
+                local row = math.floor((vim.o.lines - height) / 2)
+                local col = math.floor((vim.o.columns - width) / 2)
+                local win = vim.api.nvim_open_win(buf, true, {
+                    relative = "editor", row = row, col = col,
+                    width = width, height = height,
+                    style = "minimal", border = "rounded",
+                    title = " Commit Info ", title_pos = "center",
+                })
+                local lines = {
+                    "  Commit:  " .. info.hash,
+                    "  Author:  " .. info.author .. " <" .. info.email .. ">",
+                    "  Date:    " .. info.date,
+                    "",
+                    "  " .. info.subject,
+                }
+                vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+                vim.api.nvim_buf_set_option(buf, "modifiable", false)
+                vim.keymap.set("n", "q", "<cmd>close<CR>",
+                               {buffer = buf, silent = true})
+                vim.keymap.set("n", "<Esc>", "<cmd>close<CR>",
+                               {buffer = buf, silent = true})
+            end
+
+            local function copy_to_clipboard(text, msg)
+                if text and text ~= "" then
+                    vim.fn.setreg("+", text)
+                    vim.notify(msg or "Copied to clipboard",
+                               vim.log.levels.INFO)
+                end
+            end
+
+            local function get_commit_at_entry()
+                local view = lib.get_current_view()
+                if not view then return nil end
+                if vim.bo.filetype == "DiffviewFileHistory" then
+                    local cursor = vim.api.nvim_win_get_cursor(0)
+                    local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+                    for i = cursor[1], 1, -1 do
+                        local hash = lines[i]:match("^[%s*|/\\]*([a-f0-9]+)")
+                        if hash and #hash >= 7 then return hash end
+                    end
+                end
+                local file = get_file_at_cursor()
+                if not file then return nil end
+                local root = get_git_root()
+                if root == "" then return nil end
+                return git_first({"git", "-C", root, "log", "--oneline", "-1",
+                                  "--format=%H", "--", file})
+            end
+
+            local function open_remote_url(commit_hash)
+                if not commit_hash then
+                    commit_hash = get_commit_at_entry()
+                end
+                if not commit_hash or commit_hash == "" then return end
+                local root = get_git_root()
+                if root == "" then return end
+                local remote = git_first(
+                                   {"git", "-C", root, "remote", "get-url",
+                                    "origin"})
+                if remote == "" then
+                    vim.notify("No remote 'origin' configured",
+                               vim.log.levels.WARN)
+                    return
+                end
+                local url = remote:gsub("%.git$", "")
+                url = url:gsub("git@([^:]+):", "https://%1/")
+                if url:match("github") or url:match("gitlab") then
+                    url = url .. "/commit/" .. commit_hash
+                end
+                vim.fn.system({"open", url})
+                vim.notify("Opened: " .. url, vim.log.levels.INFO)
+            end
+
             require("diffview").setup({
                 diff_binaries = false,
                 enhanced_diff_hl = true,
@@ -1276,81 +1399,281 @@ plugins = {
                 keymaps = {
                     disable_defaults = false,
                     view = {
-                        ["<Tab>"] = require("diffview.actions").select_next_entry,
-                        ["<S-Tab>"] = require("diffview.actions").select_prev_entry,
-                        ["gf"] = require("diffview.actions").goto_file,
-                        ["<C-w><C-f>"] = require("diffview.actions").goto_file_split,
-                        ["<C-w>gf"] = require("diffview.actions").goto_file_tab,
-                        ["<leader>e"] = require("diffview.actions").focus_files,
-                        ["<leader>b"] = require("diffview.actions").toggle_files,
-                        ["g<C-x>"] = require("diffview.actions").cycle_layout,
-                        ["[x"] = require("diffview.actions").prev_conflict,
-                        ["]x"] = require("diffview.actions").next_conflict,
-                        ["<Esc>"] = require("diffview.actions").close,
-                        ["q"] = require("diffview.actions").close
+                        ["<Tab>"] = actions.select_next_entry,
+                        ["<S-Tab>"] = actions.select_prev_entry,
+                        ["gf"] = actions.goto_file,
+                        ["<C-w><C-f>"] = actions.goto_file_split,
+                        ["<C-w>gf"] = actions.goto_file_tab,
+                        ["<leader>e"] = actions.focus_files,
+                        ["<leader>b"] = actions.toggle_files,
+                        ["g<C-x>"] = actions.cycle_layout,
+                        ["[x"] = actions.prev_conflict,
+                        ["]x"] = actions.next_conflict,
+                        ["<Esc>"] = actions.close,
+                        ["q"] = actions.close,
+
+                        ["gb"] = function()
+                            local file = get_file_at_cursor()
+                            if file then
+                                vim.cmd("Gitsigns toggle_current_line_blame")
+                            end
+                        end,
+                        ["gB"] = function()
+                            local file = get_file_at_cursor()
+                            if file then
+                                vim.cmd("Gitsigns blame")
+                            end
+                        end,
+                        ["gy"] = function()
+                            local hash = get_commit_at_entry()
+                            copy_to_clipboard(hash, "Commit hash copied")
+                        end,
+                        ["gY"] = function()
+                            local hash = get_commit_at_entry()
+                            if hash then
+                                local info = git_show_info(hash)
+                                if info then
+                                    copy_to_clipboard(
+                                        info.subject,
+                                        "Commit message copied")
+                                end
+                            end
+                        end,
+                        ["gi"] = function()
+                            local hash = get_commit_at_entry()
+                            if hash then
+                                show_commit_float(git_show_info(hash))
+                            end
+                        end,
+                        ["gu"] = function()
+                            open_remote_url()
+                        end,
+                        ["gl"] = function()
+                            local file = get_file_at_cursor()
+                            if file then
+                                vim.cmd("DiffviewFileHistory %")
+                            end
+                        end,
+                        ["gL"] = function()
+                            local entry = get_current_entry()
+                            if entry then
+                                vim.cmd("DiffviewFileHistory")
+                            end
+                        end,
+                        ["gp"] = function()
+                            local file = get_file_at_cursor()
+                            if file then
+                                vim.cmd("Gitsigns preview_hunk")
+                            end
+                        end,
+                        ["gn"] = function()
+                            local file = get_file_at_cursor()
+                            if file then
+                                vim.cmd("Gitsigns next_hunk")
+                            end
+                        end,
+                        ["gS"] = function()
+                            local file = get_file_at_cursor()
+                            if file then
+                                vim.cmd("Gitsigns stage_buffer")
+                            end
+                        end,
+                        ["gU"] = function()
+                            local file = get_file_at_cursor()
+                            if file then
+                                vim.cmd("Gitsigns reset_buffer")
+                            end
+                        end,
+                        ["tt"] = function()
+                            vim.opt.diffopt:append("iwhite")
+                            vim.notify("Whitespace ignored in diff",
+                                       vim.log.levels.INFO)
+                        end,
+                        ["tT"] = function()
+                            vim.opt.diffopt:remove("iwhite")
+                            vim.notify("Whitespace shown in diff",
+                                       vim.log.levels.INFO)
+                        end,
+                        ["g?"] = function()
+                            local lines = {
+                                "  Diffview View Panel Keymaps",
+                                "  ─────────────────────────────",
+                                "  gb    Toggle current line blame",
+                                "  gB    Open full blame view",
+                                "  gy    Copy commit hash",
+                                "  gY    Copy commit message",
+                                "  gi    Show commit info",
+                                "  gu    Open commit URL in browser",
+                                "  gl    Show file history (current file)",
+                                "  gL    Show file history (all files)",
+                                "  gp    Preview hunk",
+                                "  gn    Next hunk",
+                                "  gS    Stage buffer",
+                                "  gU    Unstage buffer",
+                                "  tt    Toggle whitespace (ignore)",
+                                "  tT    Toggle whitespace (show)",
+                                "  gf    Goto file",
+                                "  q     Close",
+                            }
+                            vim.notify(table.concat(lines, "\n"),
+                                       vim.log.levels.INFO)
+                        end,
                     },
                     file_panel = {
-                        ["j"] = require("diffview.actions").next_entry,
-                        ["k"] = require("diffview.actions").prev_entry,
-                        ["<CR>"] = require("diffview.actions").select_entry,
-                        ["o"] = require("diffview.actions").select_entry,
-                        ["<2-LeftMouse>"] = require("diffview.actions").select_entry,
-                        ["-"] = require("diffview.actions").toggle_stage_entry,
-                        ["S"] = require("diffview.actions").stage_all,
-                        ["U"] = require("diffview.actions").unstage_all,
-                        ["X"] = require("diffview.actions").restore_entry,
-                        ["R"] = require("diffview.actions").refresh_files,
-                        ["L"] = require("diffview.actions").open_commit_log,
-                        ["<Tab>"] = require("diffview.actions").select_next_entry,
-                        ["<S-Tab>"] = require("diffview.actions").select_prev_entry,
-                        ["gf"] = require("diffview.actions").goto_file,
-                        ["<C-w><C-f>"] = require("diffview.actions").goto_file_split,
-                        ["<C-w>gf"] = require("diffview.actions").goto_file_tab,
-                        ["i"] = require("diffview.actions").listing_style,
-                        ["f"] = require("diffview.actions").toggle_flatten_dirs,
-                        ["<leader>e"] = require("diffview.actions").focus_files,
-                        ["<leader>b"] = require("diffview.actions").toggle_files,
-                        ["g<C-x>"] = require("diffview.actions").cycle_layout,
-                        ["[x"] = require("diffview.actions").prev_conflict,
-                        ["]x"] = require("diffview.actions").next_conflict,
-                        ["<Esc>"] = require("diffview.actions").close,
-                        ["q"] = require("diffview.actions").close
+                        ["j"] = actions.next_entry,
+                        ["k"] = actions.prev_entry,
+                        ["<CR>"] = actions.select_entry,
+                        ["o"] = actions.select_entry,
+                        ["<2-LeftMouse>"] = actions.select_entry,
+                        ["-"] = actions.toggle_stage_entry,
+                        ["S"] = actions.stage_all,
+                        ["U"] = actions.unstage_all,
+                        ["X"] = actions.restore_entry,
+                        ["R"] = actions.refresh_files,
+                        ["L"] = actions.open_commit_log,
+                        ["<Tab>"] = actions.select_next_entry,
+                        ["<S-Tab>"] = actions.select_prev_entry,
+                        ["gf"] = actions.goto_file,
+                        ["<C-w><C-f>"] = actions.goto_file_split,
+                        ["<C-w>gf"] = actions.goto_file_tab,
+                        ["i"] = actions.listing_style,
+                        ["f"] = actions.toggle_flatten_dirs,
+                        ["<leader>e"] = actions.focus_files,
+                        ["<leader>b"] = actions.toggle_files,
+                        ["g<C-x>"] = actions.cycle_layout,
+                        ["[x"] = actions.prev_conflict,
+                        ["]x"] = actions.next_conflict,
+                        ["<Esc>"] = actions.close,
+                        ["q"] = actions.close,
+
+                        ["gb"] = function()
+                            local entry = get_current_entry()
+                            if entry then
+                                vim.cmd("Gitsigns toggle_current_line_blame")
+                            end
+                        end,
+                        ["gB"] = function()
+                            local entry = get_current_entry()
+                            if entry then
+                                vim.cmd("Gitsigns blame")
+                            end
+                        end,
+                        ["gy"] = function()
+                            local hash = get_commit_at_entry()
+                            copy_to_clipboard(hash, "Commit hash copied")
+                        end,
+                        ["gY"] = function()
+                            local hash = get_commit_at_entry()
+                            if hash then
+                                local info = git_show_info(hash)
+                                if info then
+                                    copy_to_clipboard(
+                                        info.subject,
+                                        "Commit message copied")
+                                end
+                            end
+                        end,
+                        ["gi"] = function()
+                            local hash = get_commit_at_entry()
+                            if hash then
+                                show_commit_float(git_show_info(hash))
+                            end
+                        end,
+                        ["gu"] = function()
+                            open_remote_url()
+                        end,
+                        ["gl"] = function()
+                            local entry = get_current_entry()
+                            if entry then
+                                vim.cmd("DiffviewFileHistory %")
+                            end
+                        end,
                     },
                     file_history_panel = {
-                        ["g!"] = require("diffview.actions").options,
-                        ["<C-A-d>"] = require("diffview.actions").open_in_diffview,
-                        ["y"] = require("diffview.actions").copy_hash,
-                        ["L"] = require("diffview.actions").open_commit_log,
-                        ["zR"] = require("diffview.actions").open_all_folds,
-                        ["zM"] = require("diffview.actions").close_all_folds,
-                        ["j"] = require("diffview.actions").next_entry,
-                        ["k"] = require("diffview.actions").prev_entry,
-                        ["<CR>"] = require("diffview.actions").select_entry,
-                        ["o"] = require("diffview.actions").select_entry,
-                        ["<2-LeftMouse>"] = require("diffview.actions").select_entry,
-                        ["<Tab>"] = require("diffview.actions").select_next_entry,
-                        ["<S-Tab>"] = require("diffview.actions").select_prev_entry,
-                        ["gf"] = require("diffview.actions").goto_file,
-                        ["<C-w><C-f>"] = require("diffview.actions").goto_file_split,
-                        ["<C-w>gf"] = require("diffview.actions").goto_file_tab,
-                        ["<leader>e"] = require("diffview.actions").focus_files,
-                        ["<leader>b"] = require("diffview.actions").toggle_files,
-                        ["g<C-x>"] = require("diffview.actions").cycle_layout,
-                        ["<Esc>"] = require("diffview.actions").close,
-                        ["q"] = require("diffview.actions").close
+                        ["g!"] = actions.options,
+                        ["<C-A-d>"] = actions.open_in_diffview,
+                        ["y"] = actions.copy_hash,
+                        ["L"] = actions.open_commit_log,
+                        ["zR"] = actions.open_all_folds,
+                        ["zM"] = actions.close_all_folds,
+                        ["j"] = actions.next_entry,
+                        ["k"] = actions.prev_entry,
+                        ["<CR>"] = actions.select_entry,
+                        ["o"] = actions.select_entry,
+                        ["<2-LeftMouse>"] = actions.select_entry,
+                        ["<Tab>"] = actions.select_next_entry,
+                        ["<S-Tab>"] = actions.select_prev_entry,
+                        ["gf"] = actions.goto_file,
+                        ["<C-w><C-f>"] = actions.goto_file_split,
+                        ["<C-w>gf"] = actions.goto_file_tab,
+                        ["<leader>e"] = actions.focus_files,
+                        ["<leader>b"] = actions.toggle_files,
+                        ["g<C-x>"] = actions.cycle_layout,
+                        ["<Esc>"] = actions.close,
+                        ["q"] = actions.close,
+
+                        ["gY"] = function()
+                            local hash = get_commit_at_entry()
+                            if hash then
+                                local info = git_show_info(hash)
+                                if info then
+                                    copy_to_clipboard(
+                                        info.subject,
+                                        "Commit message copied")
+                                end
+                            end
+                        end,
+                        ["gi"] = function()
+                            local hash = get_commit_at_entry()
+                            if hash then
+                                show_commit_float(git_show_info(hash))
+                            end
+                        end,
+                        ["gu"] = function()
+                            open_remote_url()
+                        end,
+                        ["ga"] = function()
+                            vim.ui.input(
+                                {prompt = "Filter by author: "},
+                                function(input)
+                                    if input and input ~= "" then
+                                        vim.cmd(
+                                            "DiffviewFileHistory --author=" ..
+                                                input)
+                                    end
+                                end)
+                        end,
+                        ["gm"] = function()
+                            vim.ui.input(
+                                {prompt = "Search commit messages: "},
+                                function(input)
+                                    if input and input ~= "" then
+                                        vim.cmd(
+                                            "DiffviewFileHistory --grep=" ..
+                                                input)
+                                    end
+                                end)
+                        end,
+                        ["g-"] = function()
+                            vim.cmd("DiffviewFileHistory --skip=" ..
+                                        vim.b.dv_skip or 0 + 50)
+                        end,
+                        ["g="] = function()
+                            vim.cmd("DiffviewFileHistory")
+                        end,
                     },
                     option_panel = {
-                        ["<Tab>"] = require("diffview.actions").select_entry,
-                        ["q"] = require("diffview.actions").close,
-                        ["<Esc>"] = require("diffview.actions").close
+                        ["<Tab>"] = actions.select_entry,
+                        ["q"] = actions.close,
+                        ["<Esc>"] = actions.close
                     }
                 }
             })
 
-            -- Keymaps
+            -- Global keymaps
             local map = vim.keymap.set
             map("n", "<leader>gv", "<cmd>DiffviewOpen<CR>",
-                {desc = "Open Diffview"})
+                {desc = "Diffview"})
             map("n", "<leader>gV", "<cmd>DiffviewClose<CR>",
                 {desc = "Close Diffview"})
             map("n", "<leader>gh", "<cmd>DiffviewFileHistory<CR>",
