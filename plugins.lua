@@ -1406,6 +1406,8 @@ plugins = {
                         ["<C-w>gf"] = actions.goto_file_tab,
                         ["<leader>e"] = actions.focus_files,
                         ["<leader>b"] = actions.toggle_files,
+                        ["gF"] = actions.goto_file_split,
+                        ["gO"] = actions.goto_file_tab,
                         ["g<C-x>"] = actions.cycle_layout,
                         ["[x"] = actions.prev_conflict,
                         ["]x"] = actions.next_conflict,
@@ -1460,6 +1462,18 @@ plugins = {
                                 vim.cmd("DiffviewFileHistory")
                             end
                         end,
+                        ["gd"] = function()
+                            local file = get_file_at_cursor()
+                            if file then
+                                vim.cmd("Gitsigns reset_hunk")
+                            end
+                        end,
+                        ["gD"] = function()
+                            local file = get_file_at_cursor()
+                            if file then
+                                vim.cmd("Gitsigns reset_buffer")
+                            end
+                        end,
                         ["gp"] = function()
                             local file = get_file_at_cursor()
                             if file then
@@ -1498,21 +1512,25 @@ plugins = {
                             local lines = {
                                 "  Diffview View Panel Keymaps",
                                 "  ─────────────────────────────",
-                                "  gb    Toggle current line blame",
+                                "  gb    Toggle line blame",
                                 "  gB    Open full blame view",
+                                "  gd    Discard hunk (undo section)",
+                                "  gD    Discard file (undo entire file)",
                                 "  gy    Copy commit hash",
                                 "  gY    Copy commit message",
                                 "  gi    Show commit info",
                                 "  gu    Open commit URL in browser",
-                                "  gl    Show file history (current file)",
-                                "  gL    Show file history (all files)",
+                                "  gl    File history (current file)",
+                                "  gL    File history (all files)",
                                 "  gp    Preview hunk",
                                 "  gn    Next hunk",
                                 "  gS    Stage buffer",
                                 "  gU    Unstage buffer",
-                                "  tt    Toggle whitespace (ignore)",
-                                "  tT    Toggle whitespace (show)",
+                                "  gF    Open full file in split",
+                                "  gO    Open full file in tab",
                                 "  gf    Goto file",
+                                "  tt    Ignore whitespace",
+                                "  tT    Show whitespace",
                                 "  q     Close",
                             }
                             vim.notify(table.concat(lines, "\n"),

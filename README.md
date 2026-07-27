@@ -182,25 +182,29 @@ This is a general-purpose Neovim configuration with:
 ### Diffview (GitLens-like keymaps)
 
 **Inside the diff view (press `g?` for help):**
-| Keymap | Action                     |
-| ------ | -------------------------- |
-| `g?`   | Show keymap help           |
-| `gb`   | Toggle line blame          |
-| `gB`   | Open full blame view       |
-| `gy`   | Copy commit hash           |
-| `gY`   | Copy commit message        |
-| `gi`   | Show commit info           |
-| `gu`   | Open commit URL in browser |
-| `gl`   | File history (current)     |
-| `gL`   | File history (all)         |
-| `gp`   | Preview hunk               |
-| `gn`   | Next hunk                  |
-| `gS`   | Stage buffer               |
-| `gU`   | Unstage buffer             |
-| `tt`   | Toggle whitespace (ignore) |
-| `tT`   | Toggle whitespace (show)   |
-| `gf`   | Goto file                  |
-| `q`    | Close diffview             |
+| Keymap | Action                          |
+| ------ | ------------------------------- |
+| `g?`   | Show all keymaps                |
+| `gd`   | Discard hunk (undo section)     |
+| `gD`   | Discard file (undo entire file) |
+| `gb`   | Toggle line blame               |
+| `gB`   | Open full blame view            |
+| `gy`   | Copy commit hash                |
+| `gY`   | Copy commit message             |
+| `gi`   | Show commit info                |
+| `gu`   | Open commit URL in browser      |
+| `gl`   | File history (current file)     |
+| `gL`   | File history (all files)        |
+| `gp`   | Preview hunk                    |
+| `gn`   | Next hunk                       |
+| `gS`   | Stage buffer                    |
+| `gU`   | Unstage buffer                  |
+| `gF`   | Open full file in split         |
+| `gO`   | Open full file in tab           |
+| `gf`   | Goto file                       |
+| `tt`   | Ignore whitespace in diff       |
+| `tT`   | Show whitespace in diff         |
+| `q`    | Close diffview                  |
 
 **File panel additions (GitLens-like):**
 | Keymap | Action                     |
