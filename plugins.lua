@@ -1234,15 +1234,6 @@ plugins = {
             local actions = require("diffview.actions")
             local lib = require("diffview.lib")
 
-            local function git(cmd)
-                return vim.fn.systemlist(cmd)
-            end
-
-            local function git_first(cmd)
-                local r = git(cmd)
-                return #r > 0 and r[1] or ""
-            end
-
             local function get_current_entry()
                 local ok_view, view = pcall(lib.get_current_view)
                 if not ok_view or not view then return nil end
@@ -1257,98 +1248,21 @@ plugins = {
                 return entry.path
             end
 
-            local function get_git_root()
-                return git_first({"git", "rev-parse", "--show-toplevel"})
-            end
-
-            local function git_show_info(ref)
-                local info = git({"git", "show", "--no-patch",
-                                  "--format=%H%n%an%n%ae%n%aI%n%s", ref})
-                if #info < 5 then
-                    vim.notify("No commit info found", vim.log.levels.WARN)
-                    return nil
+            local function apply_on_file(file, cmd)
+                if not file then return end
+                local root = vim.fn.systemlist(
+                                 {"git", "rev-parse", "--show-toplevel"})[1]
+                if not root or root == "" then return end
+                local full = root .. "/" .. file
+                local bufnr = vim.fn.bufnr(full)
+                if bufnr == -1 then
+                    bufnr = vim.fn.bufadd(full)
                 end
-                return {hash = info[1], author = info[2], email = info[3],
-                        date = info[4], subject = info[5]}
-            end
-
-            local function show_commit_float(info)
-                if not info then return end
-                local buf = vim.api.nvim_create_buf(false, true)
-                local width = 72
-                local height = 12
-                local row = math.floor((vim.o.lines - height) / 2)
-                local col = math.floor((vim.o.columns - width) / 2)
-                local win = vim.api.nvim_open_win(buf, true, {
-                    relative = "editor", row = row, col = col,
-                    width = width, height = height,
-                    style = "minimal", border = "rounded",
-                    title = " Commit Info ", title_pos = "center",
-                })
-                local lines = {
-                    "  Commit:  " .. info.hash,
-                    "  Author:  " .. info.author .. " <" .. info.email .. ">",
-                    "  Date:    " .. info.date,
-                    "",
-                    "  " .. info.subject,
-                }
-                vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-                vim.api.nvim_buf_set_option(buf, "modifiable", false)
-                vim.keymap.set("n", "q", "<cmd>close<CR>",
-                               {buffer = buf, silent = true})
-                vim.keymap.set("n", "<Esc>", "<cmd>close<CR>",
-                               {buffer = buf, silent = true})
-            end
-
-            local function copy_to_clipboard(text, msg)
-                if text and text ~= "" then
-                    vim.fn.setreg("+", text)
-                    vim.notify(msg or "Copied to clipboard",
-                               vim.log.levels.INFO)
-                end
-            end
-
-            local function get_commit_at_entry()
-                local view = lib.get_current_view()
-                if not view then return nil end
-                if vim.bo.filetype == "DiffviewFileHistory" then
-                    local cursor = vim.api.nvim_win_get_cursor(0)
-                    local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-                    for i = cursor[1], 1, -1 do
-                        local hash = lines[i]:match("^[%s*|/\\]*([a-f0-9]+)")
-                        if hash and #hash >= 7 then return hash end
-                    end
-                end
-                local file = get_file_at_cursor()
-                if not file then return nil end
-                local root = get_git_root()
-                if root == "" then return nil end
-                return git_first({"git", "-C", root, "log", "--oneline", "-1",
-                                  "--format=%H", "--", file})
-            end
-
-            local function open_remote_url(commit_hash)
-                if not commit_hash then
-                    commit_hash = get_commit_at_entry()
-                end
-                if not commit_hash or commit_hash == "" then return end
-                local root = get_git_root()
-                if root == "" then return end
-                local remote = git_first(
-                                   {"git", "-C", root, "remote", "get-url",
-                                    "origin"})
-                if remote == "" then
-                    vim.notify("No remote 'origin' configured",
-                               vim.log.levels.WARN)
-                    return
-                end
-                local url = remote:gsub("%.git$", "")
-                url = url:gsub("git@([^:]+):", "https://%1/")
-                if url:match("github") or url:match("gitlab") then
-                    url = url .. "/commit/" .. commit_hash
-                end
-                vim.fn.system({"open", url})
-                vim.notify("Opened: " .. url, vim.log.levels.INFO)
+                vim.fn.bufload(bufnr)
+                vim.api.nvim_buf_call(bufnr, function()
+                    vim.cmd(cmd)
+                end)
+                vim.cmd("DiffviewRefresh")
             end
 
             require("diffview").setup({
@@ -1403,94 +1317,24 @@ plugins = {
                         ["<Esc>"] = actions.close,
                         ["q"] = actions.close,
 
-                        ["gB"] = function()
-                            local file = get_file_at_cursor()
-                            if file then
-                                vim.cmd("Gitsigns blame")
-                            end
-                        end,
-                        ["gi"] = function()
-                            local hash = get_commit_at_entry()
-                            if hash then
-                                show_commit_float(git_show_info(hash))
-                            end
-                        end,
-                        ["gl"] = function()
-                            local file = get_file_at_cursor()
-                            if file then
-                                vim.cmd("DiffviewFileHistory %")
-                            end
-                        end,
-                        ["gL"] = function()
-                            local entry = get_current_entry()
-                            if entry then
-                                vim.cmd("DiffviewFileHistory")
-                            end
-                        end,
                         ["gd"] = function()
-                            local file = get_file_at_cursor()
-                            if not file then return end
-                            local root = get_git_root()
-                            if root == "" then return end
-                            lib.close_all()
-                            vim.defer_fn(function()
-                                vim.cmd("edit " .. file)
-                                vim.cmd("Gitsigns reset_hunk")
-                            end, 50)
+                            apply_on_file(get_file_at_cursor(),
+                                          "Gitsigns reset_hunk")
                         end,
                         ["gD"] = function()
                             local file = get_file_at_cursor()
                             if not file then return end
-                            local root = get_git_root()
-                            if root == "" then return end
-                            vim.fn.system({"git", "-C", root, "checkout", "--",
-                                          file})
-                            vim.notify("Restored: " .. file,
-                                       vim.log.levels.INFO)
+                            local root = vim.fn.systemlist(
+                                             {"git", "rev-parse",
+                                              "--show-toplevel"})[1]
+                            if not root or root == "" then return end
+                            vim.fn.system(
+                                {"git", "-C", root, "checkout", "--", file})
                             vim.cmd("DiffviewRefresh")
                         end,
-                        ["gp"] = function()
-                            local file = get_file_at_cursor()
-                            if file then
-                                vim.cmd("Gitsigns preview_hunk")
-                            end
-                        end,
-                        ["gn"] = function()
-                            local file = get_file_at_cursor()
-                            if file then
-                                vim.cmd("Gitsigns next_hunk")
-                            end
-                        end,
                         ["gS"] = function()
-                            local file = get_file_at_cursor()
-                            if file then
-                                vim.cmd("Gitsigns stage_buffer")
-                            end
-                        end,
-                        ["gU"] = function()
-                            local file = get_file_at_cursor()
-                            if file then
-                                vim.cmd("Gitsigns reset_buffer")
-                            end
-                        end,
-                        ["g?"] = function()
-                            local lines = {
-                                "  Diffview View Panel Keymaps",
-                                "  ─────────────────────────────",
-                                "  gB    Open full blame view",
-                                "  gd    Discard hunk (undo section)",
-                                "  gD    Discard file (undo entire file)",
-                                "  gi    Show commit info",
-                                "  gl    File history (current file)",
-                                "  gL    File history (all files)",
-                                "  gp    Preview hunk",
-                                "  gn    Next hunk",
-                                "  gS    Stage buffer",
-                                "  gU    Unstage buffer",
-                                "  q     Close",
-                            }
-                            vim.notify(table.concat(lines, "\n"),
-                                       vim.log.levels.INFO)
+                            apply_on_file(get_file_at_cursor(),
+                                          "Gitsigns stage_hunk")
                         end,
                     },
                     file_panel = {

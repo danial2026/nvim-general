@@ -178,23 +178,16 @@ This is a general-purpose Neovim configuration with:
 | `<Space>gf` | Git file history (current file) |
 | `<Space>gl` | Git log (custom)                |
 
-### Diffview (GitLens-like keymaps)
+### Diffview
 
-**Inside the diff view (press `g?` for help):**
+**Inside the diff view:**
 | Keymap | Action                          |
 | ------ | ------------------------------- |
-| `g?`   | Show all keymaps                |
-| `gB`   | Open full blame view            |
 | `gd`   | Discard hunk (undo section)     |
 | `gD`   | Discard file (undo entire file) |
-| `gi`   | Show commit info                |
-| `gl`   | File history (current file)     |
-| `gL`   | File history (all files)        |
-| `gp`   | Preview hunk                    |
-| `gn`   | Next hunk                       |
-| `gS`   | Stage buffer                    |
-| `gU`   | Unstage buffer                  |
-| `q`    | Close diffview                  |
+| `gS`   | Stage hunk                      |
+
+Use `]c`/`[c` to navigate between changes in the diff. In the file panel, `S` stages all, `U` unstages all, `-` toggles stage entry, `X` restores entry.
 
 ### Git Hunks
 | Keymap      | Action            |
