@@ -1673,7 +1673,7 @@ plugins = {
             -- Global keymaps
             local map = vim.keymap.set
             map("n", "<leader>gv", "<cmd>DiffviewOpen<CR>",
-                {desc = "Diffview"})
+                {desc = "Open Diffview"})
             map("n", "<leader>gV", "<cmd>DiffviewClose<CR>",
                 {desc = "Close Diffview"})
             map("n", "<leader>gh", "<cmd>DiffviewFileHistory<CR>",
