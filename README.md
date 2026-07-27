@@ -194,23 +194,23 @@ Gitsigns shows VS Code-style line number coloring (`numhl`) and word-level inlin
 Use `]c`/`[c` to navigate between changes. `g<C-x>` cycles layouts. In the file panel, `S` stages all, `U` unstages all, `-` toggles stage entry, `X` restores entry.
 
 ### Git Hunks (VS Code-style inline diff)
-| Keymap        | Action                                |
-| ------------- | ------------------------------------- |
-| `]c`          | Next hunk                             |
-| `[c`          | Previous hunk                         |
-| `<Space>hs`   | Stage hunk                            |
-| `<Space>hr`   | Reset hunk (normal) / revert selected lines (visual) |
-| `<Space>hu` (vis) | Revert selected lines (saves backup for redo) |
-| `<Space>hU`   | Redo: restore last reverted selection |
-| `<Space>hS`   | Stage buffer                          |
-| `<Space>hu`   | Undo stage hunk (normal)              |
-| `<Space>hR`   | Reset buffer                          |
-| `<Space>hp`   | Preview hunk                          |
-| `<Space>hb`   | Blame line                            |
-| `<Space>tb`   | Toggle line blame                     |
-| `<Space>hd`   | Diff this                             |
-| `<Space>hD`   | Diff this ~                           |
-| `<Space>td`   | Toggle deleted                        |
+| Keymap              | Action                                |
+| ------------------- | ------------------------------------- |
+| `]c`                | Next hunk                             |
+| `[c`                | Previous hunk                         |
+| `<Space>hs`         | Stage hunk (normal) / stage selected lines (visual) |
+| `<Space>hr`         | Reset hunk (normal) / revert selected lines w/ backup (visual) |
+| `<Space>hu` (vis)   | Revert selected lines (w/ backup for redo) |
+| `<Space>hu` (norm)  | Undo stage hunk                       |
+| `<Space>hU`         | Redo: restore last reverted selection |
+| `<Space>hS`         | Stage buffer                          |
+| `<Space>hR`         | Reset buffer                          |
+| `<Space>hp`         | Preview hunk                          |
+| `<Space>hb`         | Blame line                            |
+| `<Space>tb`         | Toggle line blame                     |
+| `<Space>hd`         | Diff this                             |
+| `<Space>hD`         | Diff this ~                           |
+| `<Space>td`         | Toggle deleted                        |
 
 **Undo/Redo workflow for reverting changes:**
 1. Select lines in visual mode → `<Space>hr` or `<Space>hu` → reverts to HEAD
