@@ -54,7 +54,7 @@ This is a general-purpose Neovim configuration with:
 - **which-key.nvim** - Keybinding helper
 
 ### Git Integration
-- **gitsigns.nvim** - Git signs in gutter, hunk navigation
+- **gitsigns.nvim** - Git signs in gutter, hunk navigation, VS Code-style inline diff with word highlighting and line number coloring
 - **neogit** - Git interface
 - **diffview.nvim** - Git diff viewer
 
@@ -178,33 +178,45 @@ This is a general-purpose Neovim configuration with:
 | `<Space>gf` | Git file history (current file) |
 | `<Space>gl` | Git log (custom)                |
 
-### Diffview
+### Diffview (VS Code-style inline diff)
+
+Gitsigns shows VS Code-style line number coloring (`numhl`) and word-level inline highlights. Use the diff view for a side-by-side view of changes.
 
 **Inside the diff view:**
 | Keymap | Action                          |
 | ------ | ------------------------------- |
-| `gd`   | Discard hunk (undo section)     |
-| `gD`   | Discard file (undo entire file) |
+| `gd`   | Discard hunk (saves backup)     |
+| `gD`   | Discard file (saves backup)     |
 | `gS`   | Stage hunk                      |
+| `<Space>hu` (vis) | Revert selected lines    |
+| `<Space>hU` | Restore last reverted file     |
 
-Use `]c`/`[c` to navigate between changes in the diff. In the file panel, `S` stages all, `U` unstages all, `-` toggles stage entry, `X` restores entry.
+Use `]c`/`[c` to navigate between changes. `g<C-x>` cycles layouts. In the file panel, `S` stages all, `U` unstages all, `-` toggles stage entry, `X` restores entry.
 
-### Git Hunks
-| Keymap      | Action            |
-| ----------- | ----------------- |
-| `]c`        | Next hunk         |
-| `[c`        | Previous hunk     |
-| `<Space>hs` | Stage hunk        |
-| `<Space>hr` | Reset hunk        |
-| `<Space>hS` | Stage buffer      |
-| `<Space>hu` | Undo stage hunk   |
-| `<Space>hR` | Reset buffer      |
-| `<Space>hp` | Preview hunk      |
-| `<Space>hb` | Blame line        |
-| `<Space>tb` | Toggle line blame |
-| `<Space>hd` | Diff this         |
-| `<Space>hD` | Diff this ~       |
-| `<Space>td` | Toggle deleted    |
+### Git Hunks (VS Code-style inline diff)
+| Keymap        | Action                                |
+| ------------- | ------------------------------------- |
+| `]c`          | Next hunk                             |
+| `[c`          | Previous hunk                         |
+| `<Space>hs`   | Stage hunk                            |
+| `<Space>hr`   | Reset hunk (normal) / revert selected lines (visual) |
+| `<Space>hu` (vis) | Revert selected lines (saves backup for redo) |
+| `<Space>hU`   | Redo: restore last reverted selection |
+| `<Space>hS`   | Stage buffer                          |
+| `<Space>hu`   | Undo stage hunk (normal)              |
+| `<Space>hR`   | Reset buffer                          |
+| `<Space>hp`   | Preview hunk                          |
+| `<Space>hb`   | Blame line                            |
+| `<Space>tb`   | Toggle line blame                     |
+| `<Space>hd`   | Diff this                             |
+| `<Space>hD`   | Diff this ~                           |
+| `<Space>td`   | Toggle deleted                        |
+
+**Undo/Redo workflow for reverting changes:**
+1. Select lines in visual mode → `<Space>hr` or `<Space>hu` → reverts to HEAD
+2. Oops — `u` (Neovim's native undo) to undo the text revert
+3. Or `<Space>hU` to restore from saved backup (redo)
+4. Works in both normal editing (gitsigns) and diffview
 
 ### Database
 | Keymap        | Action                        |
@@ -472,6 +484,15 @@ URLs are pinged via curl and displayed with status/latency. History with latency
 <Space>hp   # Preview hunk
 <Space>hs   # Stage hunk
 ```
+
+**Undo changes (VS Code-style):**
+```
+Visual select lines → <Space>hr   # Revert lines
+<Space>hU                          # Redo (restore last reverted)
+u                                  # Undo the text revert
+```
+
+Works in any file with uncommitted changes (gitsigns gutter signs visible).
 
 ### File Navigation
 
