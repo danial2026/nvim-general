@@ -248,12 +248,15 @@ Use `]c`/`[c` to navigate between changes. `g<C-x>` cycles layouts. In the file 
 | `<Space>me` | Enable rendering  |
 | `<Space>md` | Disable rendering |
 
-### TODO Comments
-| Keymap      | Action                   |
-| ----------- | ------------------------ |
-| `]t`        | Next TODO/FIXME comment  |
-| `[t`        | Previous TODO/FIXME comment |
-| `<Space>st` | Search TODO comments     |
+### TODO Comments & All Comments
+Searches for TODO, FIXME, BUG, HACK, WARNING, NOTE, INFO, PERF, TEST, and more (full list in plugins.lua).
+| Keymap       | Action                                   |
+| ------------ | ---------------------------------------- |
+| `]t`         | Next TODO/FIXME comment                  |
+| `[t`         | Previous TODO/FIXME comment              |
+| `<Space>st`  | Search all TODO/FIXME/NOTE/etc keywords  |
+| `<Space>sc`  | Search ALL comment lines (filetype-aware — finds commented-out code too) |
+| `<Space>sC`  | Broad comment search (regex: `^\s*[/#-]` across all files) |
 
 ### Terminal
 | Keymap             | Action               |

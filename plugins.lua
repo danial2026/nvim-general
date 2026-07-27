@@ -2407,7 +2407,23 @@ plugins = {
         dependencies = {"nvim-lua/plenary.nvim"},
         event = "BufRead",
         config = function()
-            require("todo-comments").setup()
+            require("todo-comments").setup({
+                keywords = {
+                    FIX = {icon = "", color = "error",
+                           alt = {"FIXME", "BUG", "FIXIT", "ISSUE", "BUGFIX"}},
+                    TODO = {icon = "", color = "info"},
+                    HACK = {icon = "", color = "warning"},
+                    WARN = {icon = "", color = "warning",
+                            alt = {"WARNING", "XXX", "CAUTION", "DANGER"}},
+                    PERF = {icon = "", color = "warning",
+                            alt = {"OPTIM", "PERFORMANCE", "OPTIMIZE"}},
+                    NOTE = {icon = "", color = "info",
+                            alt = {"INFO", "HINT", "TIP", "NOTICE"}},
+                    TEST = {icon = "", color = "test",
+                            alt = {"TESTING", "PASS", "FAIL"}},
+                },
+                merge_keywords = true,
+            })
         end
     }, -- LSP progress spinner
     {

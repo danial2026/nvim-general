@@ -818,7 +818,45 @@ vim.keymap.set("n", "[t", function()
     require("todo-comments").jump_prev()
 end, {desc = "Previous TODO comment"})
 vim.keymap.set("n", "<leader>st", "<cmd>TodoTelescope<CR>",
-               {desc = "Search TODO comments"})
+               {desc = "Search TODO/FIXME/NOTE comments"})
+vim.keymap.set("n", "<leader>sc", function()
+    local comment_chars = {
+        lua = "--",
+        python = "#",
+        go = "//",
+        javascript = "//",
+        typescript = "//",
+        javascriptreact = "{/*",
+        typescriptreact = "{/*",
+        ruby = "#",
+        sh = "#",
+        yaml = "#",
+        make = "#",
+        conf = "#",
+        c = "//",
+        cpp = "//",
+        java = "//",
+        rust = "//",
+        dart = "//",
+        haskell = "--",
+        sql = "--",
+    }
+    local ft = vim.bo.filetype
+    local c = comment_chars[ft] or "//"
+    local escaped = c:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1")
+    require("telescope.builtin").live_grep({
+        default_text = escaped,
+        additional_args = {"--no-ignore", "--fixed-strings"},
+        prompt_title = "Comment Lines (" .. ft .. ")",
+    })
+end, {desc = "Search all comment lines"})
+vim.keymap.set("n", "<leader>sC", function()
+    require("telescope.builtin").live_grep({
+        default_text = "^\\s*[/#%-]",
+        additional_args = {"--no-ignore", "-G"},
+        prompt_title = "All Comments (broad)",
+    })
+end, {desc = "Search comments broad"})
 
 -- Transparent background
 _G.nvim_opaque_bgs = {}
