@@ -19,6 +19,50 @@ M.config = {
 -- State
 M.state = {staged_changes = nil, rules = nil}
 
+-- Sanitize string to contain only valid UTF-8 (replace invalid bytes)
+local function sanitize_utf8(s)
+    if not s then return s end
+    local result = {}
+    local i = 1
+    while i <= #s do
+        local byte = s:byte(i)
+        if byte < 128 then
+            result[#result + 1] = s:sub(i, i)
+            i = i + 1
+        elseif byte >= 194 and byte <= 223 then
+            if i + 1 <= #s then
+                local b2 = s:byte(i + 1)
+                if b2 >= 128 and b2 <= 191 then
+                    result[#result + 1] = s:sub(i, i + 1)
+                    i = i + 2
+                else i = i + 1 end
+            else i = i + 1 end
+        elseif byte >= 224 and byte <= 239 then
+            if i + 2 <= #s then
+                local b2 = s:byte(i + 1)
+                local b3 = s:byte(i + 2)
+                if b2 >= 128 and b2 <= 191 and b3 >= 128 and b3 <= 191 then
+                    result[#result + 1] = s:sub(i, i + 2)
+                    i = i + 3
+                else i = i + 1 end
+            else i = i + 1 end
+        elseif byte >= 240 and byte <= 244 then
+            if i + 3 <= #s then
+                local b2 = s:byte(i + 1)
+                local b3 = s:byte(i + 2)
+                local b4 = s:byte(i + 3)
+                if b2 >= 128 and b2 <= 191 and b3 >= 128 and b3 <= 191 and b4 >= 128 and b4 <= 191 then
+                    result[#result + 1] = s:sub(i, i + 3)
+                    i = i + 4
+                else i = i + 1 end
+            else i = i + 1 end
+        else
+            i = i + 1
+        end
+    end
+    return table.concat(result)
+end
+
 -- Check if curl is available
 local function check_curl()
     local result = vim.fn.system("which curl")
@@ -528,7 +572,7 @@ function M.create_diff_summary(changes)
     -- Include a sample of the actual diff
     local sample_diff = changes.diff_with_context or changes.diff
     if #sample_diff > 8000 then
-        sample_diff = sample_diff:sub(1, 8000) ..
+        sample_diff = sanitize_utf8(sample_diff:sub(1, 8000)) ..
                           "\n... (diff truncated due to size)"
     end
     table.insert(summary_lines, sample_diff)
@@ -558,7 +602,7 @@ function M.call_ai_api(prompt)
     "temperature": %f,
     "stream": false
 }
-]], M.config.model, vim.fn.json_encode(prompt), M.config.max_tokens,
+]], M.config.model, vim.fn.json_encode(sanitize_utf8(prompt)), M.config.max_tokens,
                                        M.config.temperature)
 
     -- Write request to temp file
