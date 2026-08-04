@@ -1590,9 +1590,15 @@ plugins = {
                 local data = panel.render_data
                 if not data then return end
 
+                -- Diffview creates a fresh root component on every
+                -- `update_components` call, so attach the footer to the newest
+                -- root to guarantee it renders after the section/file lists.
+                local root = data.components[#data.components]
+                if not root then return end
+
                 local footer = panel.footer_comp
-                if not footer then
-                    footer = data:create_component()
+                if not footer or footer.parent ~= root then
+                    footer = root:create_component()
                     panel.footer_comp = footer
                 end
                 footer:clear()
