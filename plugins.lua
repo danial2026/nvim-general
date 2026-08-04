@@ -81,6 +81,37 @@ plugins = {
     {"kassio/neoterm"}, -- UI Components for inputs
     {"MunifTanjim/nui.nvim"}, -- File and Text Search
     {
+        "stevearc/conform.nvim",
+        event = "BufWritePre",
+        config = function()
+            local dart_bin = vim.fn.expand("~/develop/flutter/bin/dart")
+            require("conform").setup({
+                formatters_by_ft = {
+                    dart = { "dart_format" },
+                    go = { "gofmt" },
+                    lua = { "stylua" },
+                    python = { "ruff_format" },
+                    json = { "prettier" },
+                    jsonc = { "prettier" },
+                    yaml = { "prettier" },
+                    html = { "prettier" },
+                    css = { "prettier" },
+                    scss = { "prettier" },
+                    javascript = { "prettier" },
+                    javascriptreact = { "prettier" },
+                    typescript = { "prettier" },
+                    typescriptreact = { "prettier" },
+                },
+                formatters = {
+                    dart_format = {
+                        command = dart_bin,
+                    },
+                },
+                format_on_save = { lsp_fallback = true, timeout_ms = 800 },
+            })
+        end
+    },
+    {
         "nvim-telescope/telescope.nvim",
         dependencies = {
             "nvim-lua/plenary.nvim", "debugloop/telescope-undo.nvim"
