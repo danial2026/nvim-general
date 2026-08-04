@@ -1583,6 +1583,83 @@ plugins = {
                     end
                 end)
             end, {desc = "Git log (custom)"})
+
+            -- Render a footer with the undo / git-add / navigation shortcuts
+            -- at the bottom of the Diffview file and file-history panels.
+            local function diffview_footer(panel, mode)
+                local data = panel.render_data
+                if not data then return end
+
+                local footer = panel.footer_comp
+                if not footer then
+                    footer = data:create_component()
+                    panel.footer_comp = footer
+                end
+                footer:clear()
+
+                local KEY = "DiffviewFilePanelSelected"
+                local DESC = "DiffviewFilePanelPath"
+                local TITLE = "DiffviewFilePanelTitle"
+                local SEP = "DiffviewNonText"
+                local PAD = "       "
+
+                local function group(label, items)
+                    footer:add_text(label, TITLE)
+                    for _, item in ipairs(items) do
+                        footer:add_text("  " .. item[1], KEY)
+                        footer:add_text(" " .. item[2], DESC)
+                    end
+                    footer:ln()
+                end
+
+                local function group_cont(items)
+                    footer:add_text(PAD, SEP)
+                    for _, item in ipairs(items) do
+                        footer:add_text("  " .. item[1], KEY)
+                        footer:add_text(" " .. item[2], DESC)
+                    end
+                    footer:ln()
+                end
+
+                footer:add_line(string.rep("─", 34), SEP)
+                footer:add_text("  Shortcuts", TITLE)
+                footer:ln()
+
+                if mode == "file_history_panel" then
+                    group("Undo ", {{"X", "restore file"}})
+                    group("View ", {{"g!", "options"}, {"y", "copy hash"}, {"<C-A-d>", "diffview"}})
+                    group("Nav  ", {{"j/k", "move"}, {"<CR>", "open"}, {"L", "log"}, {"g?", "help"}})
+                else
+                    group("Undo ", {{"X", "revert"}, {"gD", "discard"}, {"gd", "hunk"}})
+                    group_cont({{"<leader>hU", "redo"}})
+                    group("Stage", {{"-/+", "toggle"}, {"S", "all"}, {"U", "unstage"}})
+                    group_cont({{"gS", "add -p"}})
+                    group("Files", {{"j/k", "move"}, {"<CR>", "open"}, {"R", "refresh"}})
+                    group("More ", {{"f", "flat"}, {"i", "list"}, {"L", "log"}, {"g?", "help"}})
+                end
+
+                footer:add_line(string.rep("─", 34), SEP)
+            end
+
+            if not vim.g.diffview_footer_patched then
+                vim.g.diffview_footer_patched = true
+                local FilePanel = require(
+                    "diffview.scene.views.diff.file_panel").FilePanel
+                local orig_fp_render = FilePanel.render
+                function FilePanel:render()
+                    orig_fp_render(self)
+                    diffview_footer(self, "file_panel")
+                end
+
+                local FHFilePanel = require(
+                    "diffview.scene.views.file_history.file_history_panel")
+                    .FileHistoryPanel
+                local orig_fh_render = FHFilePanel.render
+                function FHFilePanel:render()
+                    orig_fh_render(self)
+                    diffview_footer(self, "file_history_panel")
+                end
+            end
         end
     }, -- Keybinding Helper
     {
