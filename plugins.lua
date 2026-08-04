@@ -1585,56 +1585,57 @@ plugins = {
             end, {desc = "Git log (custom)"})
 
             -- Render a footer with the undo / git-add / navigation shortcuts
-            -- at the bottom of the Diffview file and file-history panels.
-            local function diffview_footer(panel, mode)
-                local data = panel.render_data
-                if not data then return end
-
-                -- Diffview creates a fresh root component on every
-                -- `update_components` call, so attach the footer to the newest
-                -- root to guarantee it renders after the section/file lists.
-                local root = data.components[#data.components]
-                if not root then return end
-
-                local footer = panel.footer_comp
-                if not footer or footer.parent ~= root then
-                    footer = root:create_component()
-                    panel.footer_comp = footer
-                end
-                footer:clear()
-
+            -- at the bottom of all the Diffview panels.
+            local function diffview_footer_lines(mode)
                 local KEY = "DiffviewFilePanelSelected"
                 local DESC = "DiffviewFilePanelPath"
                 local TITLE = "DiffviewFilePanelTitle"
                 local SEP = "DiffviewNonText"
                 local PAD = "       "
 
+                local lines = {}
+                local cur = {}
+
+                local function flush()
+                    table.insert(lines, cur)
+                    cur = {}
+                end
+
+                local function text(s, hl)
+                    table.insert(cur, {s, hl or DESC})
+                end
+
                 local function group(label, items)
-                    footer:add_text(label, TITLE)
+                    text(label, TITLE)
                     for _, item in ipairs(items) do
-                        footer:add_text("  " .. item[1], KEY)
-                        footer:add_text(" " .. item[2], DESC)
+                        text("  " .. item[1], KEY)
+                        text(" " .. item[2], DESC)
                     end
-                    footer:ln()
+                    flush()
                 end
 
                 local function group_cont(items)
-                    footer:add_text(PAD, SEP)
+                    text(PAD, SEP)
                     for _, item in ipairs(items) do
-                        footer:add_text("  " .. item[1], KEY)
-                        footer:add_text(" " .. item[2], DESC)
+                        text("  " .. item[1], KEY)
+                        text(" " .. item[2], DESC)
                     end
-                    footer:ln()
+                    flush()
                 end
 
-                footer:add_line(string.rep("─", 34), SEP)
-                footer:add_text("  Shortcuts", TITLE)
-                footer:ln()
+                text(string.rep("─", 34), SEP)
+                flush()
+                text("  Shortcuts", TITLE)
+                flush()
 
                 if mode == "file_history_panel" then
                     group("Undo ", {{"X", "restore file"}})
                     group("View ", {{"g!", "options"}, {"y", "copy hash"}, {"<C-A-d>", "diffview"}})
                     group("Nav  ", {{"j/k", "move"}, {"<CR>", "open"}, {"L", "log"}, {"g?", "help"}})
+                elseif mode == "option_panel" then
+                    group("Keys ", {{"<Tab>", "change option"}, {"<CR>", "toggle"}, {"q", "close"}})
+                elseif mode == "commit_log" then
+                    group("Keys ", {{"q", "close"}, {"g?", "help"}})
                 else
                     group("Undo ", {{"X", "revert"}, {"gD", "discard"}, {"gd", "hunk"}})
                     group_cont({{"<leader>hU", "redo"}})
@@ -1644,7 +1645,59 @@ plugins = {
                     group("More ", {{"f", "flat"}, {"i", "list"}, {"L", "log"}, {"g?", "help"}})
                 end
 
-                footer:add_line(string.rep("─", 34), SEP)
+                text(string.rep("─", 34), SEP)
+                flush()
+
+                return lines
+            end
+
+            local function diffview_footer(panel, mode)
+                local data = panel.render_data
+                if not data then return end
+                local lines = diffview_footer_lines(mode)
+
+                if #data.components > 0 then
+                    -- Diffview creates a fresh root component on every
+                    -- `update_components` call, so attach the footer to the
+                    -- newest root to render it after the section/file lists.
+                    local root = data.components[#data.components]
+                    if not root then return end
+
+                    local footer = panel.footer_comp
+                    if not footer or footer.parent ~= root then
+                        footer = root:create_component()
+                        panel.footer_comp = footer
+                    end
+                    footer:clear()
+
+                    for _, line in ipairs(lines) do
+                        for _, seg in ipairs(line) do
+                            footer:add_text(seg[1], seg[2])
+                        end
+                        footer:ln()
+                    end
+                else
+                    -- Raw-lines panels (commit log) append plain lines + hl.
+                    local hl = {}
+                    local start = #data.lines
+                    for i, line in ipairs(lines) do
+                        local text = ""
+                        for _, seg in ipairs(line) do
+                            local first = #text
+                            table.insert(hl, {
+                                group = seg[2],
+                                line_idx = start + i - 1,
+                                first = first,
+                                last = first + #seg[1],
+                            })
+                            text = text .. seg[1]
+                        end
+                        data.lines[#data.lines + 1] = text
+                    end
+                    for _, h in ipairs(hl) do
+                        table.insert(data.hl, h)
+                    end
+                end
             end
 
             if not vim.g.diffview_footer_patched then
@@ -1664,6 +1717,23 @@ plugins = {
                 function FHFilePanel:render()
                     orig_fh_render(self)
                     diffview_footer(self, "file_history_panel")
+                end
+
+                local FHOptionPanel = require(
+                    "diffview.scene.views.file_history.option_panel")
+                    .FHOptionPanel
+                local orig_opt_render = FHOptionPanel.render
+                function FHOptionPanel:render()
+                    orig_opt_render(self)
+                    diffview_footer(self, "option_panel")
+                end
+
+                local CommitLogPanel = require(
+                    "diffview.ui.panels.commit_log_panel").CommitLogPanel
+                local orig_cl_render = CommitLogPanel.render
+                function CommitLogPanel:render()
+                    orig_cl_render(self)
+                    diffview_footer(self, "commit_log")
                 end
             end
         end
