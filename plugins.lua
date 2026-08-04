@@ -1348,7 +1348,7 @@ plugins = {
                         flatten_dirs = true,
                         folder_statuses = "only_folded"
                     },
-                    win_config = {position = "left", width = 35}
+                    win_config = {position = "left", width = 42}
                 },
                 file_history_panel = {
                     log_options = {
@@ -1623,7 +1623,7 @@ plugins = {
                     flush()
                 end
 
-                text(string.rep("─", 34), SEP)
+                text(string.rep("─", 40), SEP)
                 flush()
                 text("  Shortcuts", TITLE)
                 flush()
@@ -1645,7 +1645,7 @@ plugins = {
                     group("More ", {{"f", "flat"}, {"i", "list"}, {"L", "log"}, {"g?", "help"}})
                 end
 
-                text(string.rep("─", 34), SEP)
+                text(string.rep("─", 40), SEP)
                 flush()
 
                 return lines
