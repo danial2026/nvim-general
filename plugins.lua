@@ -135,7 +135,10 @@ plugins = {
                         "coverage/", ".turbo/", ".vercel/", "out/",
                         ".dart_tool/", ".flutter-plugins",
                         ".flutter-plugins-dependencies"
-                    }
+                    },
+                    -- Cache closed pickers (query + selection) across many
+                    -- distinct searches so re-invoking a key can resume it.
+                    cache_picker = {num_pickers = 20},
                 },
                 extensions = {
                     undo = {
@@ -170,19 +173,62 @@ plugins = {
             -- Keymaps for searching
             local map = vim.keymap.set
 
+            -- Resumable-picker wrapper: keep per-tag last picker cached so
+            -- re-invoking the same key restores the previous query + cursor.
+            local function picker_attach(tag)
+                return function(prompt_bufnr)
+                    local picker = require("telescope.actions.state")
+                        .get_current_picker(prompt_bufnr)
+                    picker._memo_tag = tag
+                    return true -- keep default mappings
+                end
+            end
+            local function try_resume(tag)
+                local cached = require("telescope.state")
+                    .get_global_key("cached_pickers") or {}
+                for i, p in ipairs(cached) do
+                    if p._memo_tag == tag and p.cache_picker
+                       and p.cache_picker.is_cached then
+                        vim.schedule(function()
+                            require("telescope.builtin").resume({
+                                cache_index = i,
+                            })
+                        end)
+                        return true
+                    end
+                end
+                return false
+            end
+            local function memo(tag, fn, opts)
+                return function()
+                    if not try_resume(tag) then
+                        opts = vim.tbl_deep_extend("force", opts or {},
+                                                    {attach_mappings = picker_attach(tag)})
+                        fn(opts)
+                    end
+                end
+            end
+
             -- Search in all files in current directory
-            map("n", "<leader>ff", builtin.find_files,
+            map("n", "<leader>ff",
+                memo("ff", builtin.find_files, {}),
                 {desc = "Find files in current directory"})
-            map("n", "<leader>fa", builtin.live_grep,
+            map("n", "<leader>fa",
+                memo("fa", builtin.live_grep, {}),
                 {desc = "Grep text in all files (current directory)"})
 
             -- Search all keymaps/commands
-            map("n", "<leader>fc", builtin.keymaps,
+            map("n", "<leader>fc",
+                memo("fc", builtin.keymaps, {}),
                 {desc = "Search all keymaps/commands"})
 
             -- Search undo history with Telescope
-            map("n", "<leader>fu", "<cmd>Telescope undo<CR>",
-                {desc = "Search undo history (Telescope)"})
+            map("n", "<leader>fu", function()
+                if not try_resume("fu") then
+                    local opts = {attach_mappings = picker_attach("fu")}
+                    require("telescope").extensions.undo.undo(opts)
+                end
+            end, {desc = "Search undo history (Telescope)"})
 
             -- Git Explorer: open script output in a floating terminal at the top
             map("n", "<leader>ge", function()
@@ -412,10 +458,9 @@ plugins = {
             })
 
             -- Grep content NOT in .gitignore (respects .gitignore patterns)
-            map("n", "<leader>fg", function()
+            local fg_opts = function()
                 local builtin = require("telescope.builtin")
                 local previewers = require("telescope.previewers")
-                local conf = require("telescope.config").values
 
                 -- Custom previewer using bat for grep results
                 local bat_previewer = previewers.new_termopen_previewer({
@@ -442,12 +487,18 @@ plugins = {
                     end
                 })
 
-                builtin.live_grep({
+                return {
                     prompt_title = "Grep (respecting .gitignore)",
                     previewer = bat_previewer,
                     use_regex = true,
-                })
-            end, { desc = "Grep content (respect .gitignore)" })
+                }
+            end
+            map("n", "<leader>fg",
+                memo("fg", function(opts)
+                    local builtin = require("telescope.builtin")
+                    builtin.live_grep(opts)
+                end, fg_opts()),
+                {desc = "Grep content (respect .gitignore)"})
 
 
             -- Search in specific subdirectory
