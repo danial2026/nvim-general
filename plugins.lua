@@ -1184,10 +1184,12 @@ plugins = {
                     return
                 end
 
-                pickers.new({}, {
-                    prompt_title = "Stage Files (Tab=select, Enter=stage)",
-                    finder = finders.new_table({
-                        results = all_files,
+                local function make_finder()
+                    local unstaged = vim.fn.systemlist("git diff --name-only")
+                    local untracked = vim.fn.systemlist(
+                                         "git ls-files --others --exclude-standard")
+                    return finders.new_table({
+                        results = vim.list_extend(unstaged, untracked),
                         entry_maker = function(entry)
                             return {
                                 value = entry,
@@ -1196,7 +1198,12 @@ plugins = {
                                 path = entry
                             }
                         end
-                    }),
+                    })
+                end
+
+                pickers.new({}, {
+                    prompt_title = "Stage Files (Tab=select, Enter=stage)",
+                    finder = make_finder(),
                     sorter = conf.generic_sorter({}),
                     previewer = previewers.new_termopen_previewer({
                         get_command = function(entry)
@@ -1212,7 +1219,6 @@ plugins = {
                             local picker =
                                 action_state.get_current_picker(prompt_bufnr)
                             local selections = picker:get_multi_selection()
-                            actions.close(prompt_bufnr)
 
                             -- If no multi-selection, stage the current entry
                             if #selections == 0 then
@@ -1236,6 +1242,8 @@ plugins = {
                                            vim.log.levels.INFO)
                             end
                             vim.cmd("checktime")
+                            picker:refresh(make_finder(),
+                                           {reset_prompt = false})
                         end)
                         return true
                     end
@@ -1260,9 +1268,10 @@ plugins = {
                     return
                 end
 
-                pickers.new({}, {
-                    prompt_title = "Unstage Files (Tab=select, Enter=unstage)",
-                    finder = finders.new_table({
+                local function make_finder()
+                    local staged = vim.fn
+                                       .systemlist("git diff --cached --name-only")
+                    return finders.new_table({
                         results = staged,
                         entry_maker = function(entry)
                             return {
@@ -1272,7 +1281,12 @@ plugins = {
                                 path = entry
                             }
                         end
-                    }),
+                    })
+                end
+
+                pickers.new({}, {
+                    prompt_title = "Unstage Files (Tab=select, Enter=unstage)",
+                    finder = make_finder(),
                     sorter = conf.generic_sorter({}),
                     previewer = previewers.new_termopen_previewer({
                         get_command = function(entry)
@@ -1288,7 +1302,6 @@ plugins = {
                             local picker =
                                 action_state.get_current_picker(prompt_bufnr)
                             local selections = picker:get_multi_selection()
-                            actions.close(prompt_bufnr)
 
                             -- If no multi-selection, unstage the current entry
                             if #selections == 0 then
@@ -1313,6 +1326,8 @@ plugins = {
                                     vim.log.levels.INFO)
                             end
                             vim.cmd("checktime")
+                            picker:refresh(make_finder(),
+                                           {reset_prompt = false})
                         end)
                         return true
                     end
